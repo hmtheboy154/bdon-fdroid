@@ -2,8 +2,9 @@
   "stateVersion": 1,
   "generator": "bdon-fdroid/1.0.0",
   "packageName": "com.bilibili.sirius.official",
-  "lastChecked": 1790613763917,
-  "lastChanged": 1790613694510,
+  "manifestRules": 2,
+  "lastChecked": 1790622859290,
+  "lastChanged": 1790622370576,
   "releases": [
     {
       "url": "https://l12-pkg-download.biligames.com/sirius/apk/BanGDreamOurNotes_1.0.1_2026_09_17_22_42_02.apk",
@@ -43,13 +44,7 @@
         "com.google.android.c2dm.permission.RECEIVE",
         "android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE"
       ],
-      "features": [
-        "glEsVersion196608",
-        "android.hardware.vulkan.version",
-        "android.hardware.touchscreen",
-        "android.hardware.touchscreen.multitouch",
-        "android.hardware.touchscreen.multitouch.distinct"
-      ],
+      "features": [],
       "etag": "588a0eb9289e119108e26fb58623dd98",
       "lastModified": "Fri, 18 Sep 2026 10:45:38 GMT",
       "versionHint": "1.0.1",

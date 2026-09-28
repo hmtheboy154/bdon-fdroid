@@ -18,6 +18,24 @@ So tracking new releases means reading those bundles. This project does that,
 and publishes the result as a real F-Droid repository so the app updates itself
 from inside the F-Droid client like any other app.
 
+### The app is not restricted, and the index must not say it is
+
+F-Droid treats every entry in an app's `features` list as **mandatory**, and
+`fdroidserver` only records a `uses-feature` that has an `android:name` *and* is
+required. This project's manifest has no required features at all:
+
+```xml
+<uses-feature android:glEsVersion="0x30000"/>              <!-- no name -->
+<uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+```
+
+So the published index carries **no** feature list. An earlier version synthesised
+`glEsVersion196608` and listed every optional feature, and F-Droid then reported
+the app as incompatible with phones that ran it perfectly well from Google Play.
+`tests/test_features.py` pins the rule, and `releases.json` records which version
+of it produced each cached entry, so a change to the rules cannot be masked by
+stale metadata.
+
 ### One wrinkle worth knowing about
 
 The APK the website serves is **`com.bilibili.sirius.official`**. The Google Play
@@ -64,6 +82,33 @@ index, icon and screenshots.
 
 If the publisher ever renames the CDN host, the next scheduled run notices and
 republishes with the new mirror - no code change.
+
+### The mirror is not enough
+
+It works in the official F-Droid client, and in *nothing else*. The failure only
+shows up when you try a second client:
+
+| Client | On a 404 | Result |
+| --- | --- | --- |
+| F-Droid | falls through to the next mirror | works |
+| Neo Store | `NotFound -> Result(response)`, a *terminal* result; only exceptions rotate mirrors | fails |
+| Obtainium | never reads `mirrors`; always uses `<repo address>/<apk name>` | fails |
+
+All three agree the APK must be reachable **at the repository address**, and
+GitHub Pages cannot redirect a request. So [`worker/`](./worker) holds a small
+Cloudflare Worker that sits in front of Pages:
+
+```
+client ──▶ worker/fdroid/repo/<apk>      ──302──▶  publisher's CDN
+client ──▶ worker/fdroid/repo/entry.jar  ────────▶  GitHub Pages (proxied, byte for byte)
+```
+
+Still nothing stored by us: the 450 MB comes from bilibili and the index comes
+from Pages. The Worker reads its redirect target from `repo.mirrors[0].url`
+rather than hardcoding it, so if the publisher moves the CDN the scraper picks it
+up and the Worker follows with no redeploy. It is deployed once by hand - the
+daily workflow never touches it. See
+[step 5 of the setup guide](./docs/setup-github-actions-and-pages.md#5-deploy-the-redirector-recommended).
 
 ## How a run works
 
@@ -149,7 +194,8 @@ deploy/
     ├── index-v1.json          # legacy index for older clients
     ├── index-v1.jar
     ├── icon.jpg
-    └── icons/com.bilibili.sirius.official.jpg
+    ├── icons/com.bilibili.sirius.official.png   (the app icon, ~1 MB)
+    └── com.bilibili.sirius.official/en-US/phoneScreenshots/*.webp
 ```
 
 Both index formats are published because F-Droid 1.x clients read only v1, and
@@ -215,8 +261,10 @@ tampered index is rejected.
   is not a practical concern; a v1-only APK would simply omit the field rather
   than report a guess.
 - Screenshots are optional. The site's images are content-hashed, so pin them in
-  `repo.json` if you want a specific set; the icon is scraped automatically
-  from the page's `og:image`.
+  `repo.json` if you want a specific set. The icons are scraped: the repository
+  icon from the page's `og:image` (~307 KB), and the app icon from the site's own
+  image assets (~1 MB) - the page has no `apple-touch-icon` and its only
+  `rel=icon` is a 16px favicon, so the real icon is found in the JS bundles.
 - Only Android builds are indexed. The publisher also ships the game on Google
   Play and the App Store; both are linked from the published page.
 

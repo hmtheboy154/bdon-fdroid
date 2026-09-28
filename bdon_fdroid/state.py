@@ -20,6 +20,17 @@ from .apk import Release
 
 STATE_VERSION = 1
 
+#: Bump whenever the rules for interpreting an APK change, so a cache written by
+#: an older version is not trusted.
+#:
+#: This is not hypothetical: an earlier version synthesised a
+#: "glEsVersionNNNNNN" feature and ignored android:required="false", which made
+#: F-Droid mark the app incompatible with devices that could run it. The cached
+#: releases.json still held the bad list, so the fix appeared to do nothing
+#: until the APK was re-read. With this version recorded, that cannot happen
+#: again: stale entries stop matching and the APK is fetched once more.
+MANIFEST_RULES_VERSION = 2
+
 
 @dataclass
 class State:
@@ -28,6 +39,12 @@ class State:
     releases: list[Release]
     last_checked: int | None = None
     last_changed: int | None = None
+    manifest_rules: int = MANIFEST_RULES_VERSION
+
+    @property
+    def is_stale(self) -> bool:
+        """True when the cached entries were produced by different rules."""
+        return self.manifest_rules != MANIFEST_RULES_VERSION
 
     def sorted_releases(self) -> list[Release]:
         return sorted(self.releases, key=Release.sort_key)
@@ -65,6 +82,7 @@ class State:
             "stateVersion": STATE_VERSION,
             "generator": f"bdon-fdroid/{__version__}",
             "packageName": PACKAGE_NAME,
+            "manifestRules": MANIFEST_RULES_VERSION,
             "lastChecked": self.last_checked,
             "lastChanged": self.last_changed,
             "releases": [release.to_dict() for release in self.sorted_releases()],
@@ -94,6 +112,7 @@ def load(path: str) -> State:
         releases=releases,
         last_checked=data.get("lastChecked"),
         last_changed=data.get("lastChanged"),
+        manifest_rules=int(data.get("manifestRules", 1)),
     )
 
 

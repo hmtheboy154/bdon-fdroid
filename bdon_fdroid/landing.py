@@ -243,7 +243,9 @@ def render(
     # --- raw files -------------------------------------------------------
     parts.append("<h2>Repository files</h2>")
     parts.append('<ul class="files">')
-    base = f"{repo_url.rsplit('/', 1)[0]}/"
+    # These must be relative to the repository address itself. Deriving a base by
+    # trimming the last path segment would drop the "repo" component and 404.
+    base = repo_url.rstrip("/") + "/"
     entries = [
         ("entry.jar", "signed entry point; the client starts here"),
         ("index-v2.json", "the current index, every published version"),

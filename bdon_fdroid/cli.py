@@ -33,6 +33,20 @@ DEFAULT_DEPLOY = "deploy"
 #: docs and several client features expect the address to end in /fdroid/repo.
 REPO_SUBDIR = os.path.join("fdroid", "repo")
 
+#: Image type to file extension. Anything not listed here is skipped rather than
+#: written under a guessed extension, since a client loading a mislabelled file
+#: may simply show a broken image.
+EXTENSION_BY_TYPE = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "image/gif": ".gif",
+    "image/x-icon": ".ico",
+    "image/vnd.microsoft.icon": ".ico",
+}
+
 
 def _out(*parts: str) -> None:
     print(*parts, flush=True)
@@ -89,6 +103,15 @@ def _refresh_state(args, config, link, state: State) -> tuple[State, bool]:
     info = probe(link)
     known = state.find(link.url)
 
+    if state.is_stale:
+        # The rules for reading an APK changed, so anything cached was parsed
+        # under the old ones and cannot be reused. Re-read the APK once.
+        print(
+            "  the release cache was written by an older manifest parser; "
+            "re-reading the APK so its metadata is correct"
+        )
+        known = None
+
     if known is not None and known.remote_fingerprint() == (
         info.size,
         info.etag,
@@ -116,50 +139,65 @@ def _refresh_state(args, config, link, state: State) -> tuple[State, bool]:
     return state, True
 
 
-def _asset(url: str, name: str) -> Asset | None:
-    """Download an image into memory.
+def _asset(url: str, stem: str) -> Asset | None:
+    """Download an image into memory, choosing the extension from its type.
+
+    The extension must come from the response's ``Content-Type``, not from the
+    URL: the Google Play screenshot URLs end in ``?w=2560-h1440-rw`` with no
+    filename at all, and they serve ``image/webp``, so a URL-derived name would
+    have written WebP bytes into a ``.jpg``.
 
     Best effort throughout: a repository with no icon is still valid, so a
     failure here is reported and skipped rather than failing the build.
     """
     if not url:
         return None
-    from .http import get_bytes
+    from .http import get_bytes_with_type
 
     try:
-        data = get_bytes(url)
+        data, content_type = get_bytes_with_type(url)
     except HttpError as exc:
         _out(f"  warning: could not fetch asset {url}: {exc}")
         return None
     if not data:
         _out(f"  warning: asset {url} was empty, skipping")
         return None
-    return Asset(name=name, data=data)
+    extension = EXTENSION_BY_TYPE.get(
+        (content_type or "").split(";")[0].strip().lower(), ""
+    )
+    if not extension:
+        _out(f"  warning: unrecognised image type {content_type!r} for {url}")
+        return None
+    return Asset(name=stem + extension, data=data)
 
 
 def _build_assets(config, site) -> Assets:
-    """Pick the repository images out of what the site advertises."""
+    """Pick the repository images out of what the site advertises.
+
+    Two different icons on purpose. The *repository* icon is the small
+    ``og:image``, which every client fetches once when it syncs; the *app* icon
+    is the game's own artwork, which only a client that opens the app's page
+    needs. The site's own icon is over 1 MB, which is why the two are not
+    simply the same file.
+    """
     assets = Assets()
     package = config.package_name
 
     if config.assets.icon_url:
-        assets.repo_icon = _asset(config.assets.icon_url, config.repo.icon)
+        assets.repo_icon = _asset(config.assets.icon_url, "icon")
     elif site.og_image:
-        extension = os.path.splitext(site.og_image.rsplit("?", 1)[0])[1] or ".jpg"
-        assets.repo_icon = _asset(site.og_image, "icon" + extension)
-    if assets.repo_icon:
-        # fdroidclient resolves a v1 app icon as /icons/<name>, so a copy has to
-        # live in icons/ for older clients to find it. Reuse the bytes already
-        # fetched rather than downloading the image a second time.
-        extension = os.path.splitext(assets.repo_icon.basename)[1] or ".jpg"
-        assets.app_icon = Asset(name=f"icons/{package}{extension}", data=assets.repo_icon.data)
+        assets.repo_icon = _asset(site.og_image, "icon")
+
+    # fdroidclient resolves a v1 app icon as /icons/<name>, so the file has to
+    # live in icons/ for older clients to find it.
+    icon_source = config.assets.app_icon_url or site.app_icon
+    if icon_source:
+        assets.app_icon = _asset(icon_source, f"icons/{package}")
 
     for index, url in enumerate(
         config.assets.screenshot_urls[: config.assets.max_screenshots], start=1
     ):
-        extension = os.path.splitext(url.rsplit("?", 1)[0])[1] or ".jpg"
-        name = f"{package}/{LOCALE}/phoneScreenshots/{index}{extension}"
-        asset = _asset(url, name)
+        asset = _asset(url, f"{package}/{LOCALE}/phoneScreenshots/{index}")
         if asset is not None:
             assets.screenshots.append(asset)
     return assets

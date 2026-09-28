@@ -3,11 +3,11 @@ name: Conformance
 # Prove that the repository this project publishes is one a real F-Droid client
 # can actually consume.
 #
-# The daily update job deliberately has no Python dependencies, so this
-# workflow exists to install fdroidserver - the reference implementation - in a
-# throwaway virtualenv and run the conformance suite against it. It also
-# re-checks the *published* site, which catches problems a build-time check
-# cannot, such as GitHub Pages serving the wrong branch.
+# The daily update job deliberately has no Python dependencies, so this workflow
+# exists to install fdroidserver - the reference implementation - in a throwaway
+# virtualenv and run the conformance suite against it. It also checks the
+# redirecting front-end, which is what lets clients that cannot follow mirrors
+# install the app at all.
 on:
   push:
     branches: [main]
@@ -25,6 +25,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONUNBUFFERED: '1'
+
 jobs:
   unit:
     name: Unit tests
@@ -40,6 +43,19 @@ jobs:
           java-version: '21'
       - name: Run the test suite
         run: python3 -m unittest discover -s tests -v
+
+  worker:
+    name: Redirector tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run the Worker tests
+        # The Worker is plain JavaScript with no dependencies, so this needs
+        # nothing but node's built-in test runner.
+        run: node --test worker/
 
   conformance:
     name: Verify against fdroidserver
@@ -94,6 +110,9 @@ jobs:
       - name: Verify the published repository
         env:
           REPO_URL: ${{ inputs.repo_url }}
+          # Set this repository variable to the redirector's address once the
+          # Worker is deployed, to have it checked too.
+          REDIRECTOR_URL: ${{ vars.REDIRECTOR_URL }}
         run: |
           set -euo pipefail
           address="${REPO_URL:-https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/fdroid/repo}"
@@ -110,3 +129,32 @@ jobs:
           echo "checking $address against $fingerprint"
           "$RUNNER_TEMP/fdcheck/bin/python" -m bdon_fdroid verify \
             --repo-url "$address" --fingerprint "$fingerprint"
+
+      - name: Check the redirector serves the APK
+        if: ${{ vars.REDIRECTOR_URL != '' }}
+        env:
+          REDIRECTOR_URL: ${{ vars.REDIRECTOR_URL }}
+        run: |
+          set -euo pipefail
+          # The APK name has to be discovered rather than hardcoded: it changes
+          # with every release, and this is the same lookup the scraper does.
+          apk=$(python3 -c '
+          import json, sys, urllib.request
+          index = json.load(urllib.request.urlopen(sys.argv[1] + "/index-v2.json"))
+          versions = next(iter(index["packages"].values()))["versions"]
+          print(next(iter(versions.values()))["file"]["name"].lstrip("/"))
+          ' "$REDIRECTOR_URL")
+
+          echo "checking that $REDIRECTOR_URL/$apk redirects to the publisher's CDN"
+          location=$(curl -sS -o /dev/null -w '%{redirect_url}' "$REDIRECTOR_URL/$apk")
+
+          if [ -z "$location" ]; then
+            echo "::error::no redirect from $REDIRECTOR_URL/$apk. Clients that cannot"
+            echo "::error::follow mirrors (Neo Store, Obtainium) cannot install the app."
+            exit 1
+          fi
+          if [[ "$location" != *biligames.com* ]]; then
+            echo "::error::redirect went to $location, expected the publisher's CDN"
+            exit 1
+          fi
+          echo "redirects to $location"

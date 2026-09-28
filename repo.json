@@ -3,7 +3,13 @@
   "siteUrl": "https://bdon.biligames.com/",
 
   "repo": {
-    "_comment": "address must be the full URL users add in F-Droid, ending in /fdroid/repo. Set REPO_URL (or --repo-url) to override; the GitHub Actions workflow derives it from the repository owner if left empty.",
+    "_comment": [
+      "address must be the full URL users add in F-Droid, ending in /fdroid/repo.",
+      "Leave it empty and the workflow derives https://<owner>.github.io/bdon-fdroid/fdroid/repo,",
+      "or set the REPO_URL repository variable to point at a custom domain.",
+      "To support clients that cannot follow mirrors (Neo Store, Obtainium), set this to the",
+      "redirector's address instead - see docs/setup-github-actions-and-pages.md."
+    ],
     "address": "",
     "name": "BanG Dream! Our Notes",
     "description": "Official Android builds of BanG Dream! Our Notes, indexed straight from the publisher's website. The APKs are downloaded from the official bilibili CDN, not from this site.",
@@ -26,9 +32,25 @@
   },
 
   "assets": {
-    "_comment": "iconUrl defaults to the og:image scraped from the official site. screenshotUrls is an optional list of portrait images; the ones used by the live site are content-hashed, so prefer letting the scraper find the icon and only pin screenshots here if you want a specific set.",
+    "_comment": [
+      "All of these are optional. Leave one empty to have it scraped from the official site.",
+      "iconUrl     - repository icon; defaults to the page's og:image (small, square).",
+      "appIconUrl  - the game's own icon; scraped from the site's image assets, because the page",
+      "               has no apple-touch-icon and its only rel=icon is a 16px favicon.",
+      "screenshotUrls - pinned screenshots. The site's own images are content-hashed, so any URL",
+      "               pasted here must be updated by hand when the site is redesigned."
+    ],
     "iconUrl": "",
-    "screenshotUrls": [],
+    "appIconUrl": "",
+    "screenshotUrls": [
+      "https://play-lh.googleusercontent.com/q50FxT3SlQywy7ITJkI_NpodKRO-zh37ZqQTYh_ZrUacVarYJORjivkgsH4eR9M2WkBmpHGRKq7chh4CnE5FLCA=w2560-h1440-rw",
+      "https://play-lh.googleusercontent.com/BJhVC1-_V0QAUwhhqDNK15fxPmr_p0InUSA4xK3MV6Sc8qLu8LSxeV1HdNtT_4iMbrvJOKDJp8XCArfTiv1sog=w2560-h1440-rw",
+      "https://play-lh.googleusercontent.com/ZCc9LBA0nsDBnJQJEBvWVBjFVpC-FwwP8zWdStI5dbStyFz0dya2QVHhWzw7Rhm1ZGkh2rpMGqT7goWVi5zsKQ=w2560-h1440-rw",
+      "https://play-lh.googleusercontent.com/2I3bTIL0f7ZToUdMV6W2sME2tnmdPT77DZauJO-c-8rFmf8Gy290myglLsRF383o6E6iywkhiA86xuQ9EYBZlQ=w2560-h1440-rw",
+      "https://play-lh.googleusercontent.com/DXkpUP7Sm4BqpUdy63pqcbCeADvq3b3KaZoNNvXeinFUK1srJLtvDhjietxBMAAvA2_p6XGpchhhJjnL-zb34Do=w2560-h1440-rw",
+      "https://play-lh.googleusercontent.com/AZItOP7GTOgKg0hvkNq5P9TsPewKZfq1YRpglrnML7K1CprJr8wZYj66bmi6YeiTbOu8woFdvY_pcXFgL6qB9S4=w2560-h1440-rw",
+      "https://play-lh.googleusercontent.com/AHOcL7kF_n4mvSk6ZwvTd6mEHorVD3JCYGLcUEE4g6zRRhozW6xOzB_SeXQoOsIq62W4rUB3sZs487sAMkjbLw=w2560-h1440-rw"
+    ],
     "maxScreenshots": 4,
     "featureGraphicUrl": ""
   },

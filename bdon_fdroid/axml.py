@@ -142,6 +142,17 @@ class Manifest:
         }
 
 
+def _is_disabled(value) -> bool:
+    """True when an ``android:required`` style attribute is switched off.
+
+    AXML encodes these either as the string "false" or as a typed boolean, so
+    both have to be recognised.
+    """
+    if value is False:
+        return True
+    return isinstance(value, str) and value.strip().lower() == "false"
+
+
 def _attribute_key(pool: _StringPool, ns_index: int, name_index: int) -> str:
     """Build a collision-free key for an attribute.
 
@@ -263,12 +274,25 @@ def parse_manifest(data: bytes) -> Manifest:
             if isinstance(name, str) and name not in permissions:
                 permissions.append(name)
         elif element.name == "uses-feature":
+            # Match fdroidserver exactly (fdroidserver/update.py): only a
+            # *named* feature that is *required* belongs in the index.
+            #
+            # A feature declared only as android:glEsVersion has no name, so it
+            # is skipped - androguard.get_features() never reports it, which is
+            # why emitting "glEsVersion196608" would diverge from every real
+            # F-Droid repository. Listing it also makes clients treat a GLES
+            # level as a hard requirement and refuse to install on devices
+            # that support the game perfectly well.
             name = element.android("name")
-            if isinstance(name, str) and name not in features:
+            if not isinstance(name, str) or not name:
+                continue
+            if _is_disabled(element.android("required")):
+                continue
+            if name.startswith("android.feature."):
+                # Legacy spelling, still emitted by old build tools.
+                name = name[len("android.feature.") :]
+            if name not in features:
                 features.append(name)
-            gl = element.android("glEsVersion")
-            if isinstance(gl, int) and f"glEsVersion{gl}" not in features:
-                features.append(f"glEsVersion{gl}")
         elif element.name == "application":
             raw_native = element.android("extractNativeLibs")
             del raw_native  # not part of the index

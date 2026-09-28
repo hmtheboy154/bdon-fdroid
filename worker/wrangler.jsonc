@@ -1,0 +1,24 @@
+{
+  // Cloudflare Worker configuration.
+  //
+  // Deploy ONCE with `npx wrangler deploy` from this directory. The daily
+  // update workflow never touches it: the Worker proxies GitHub Pages, so it
+  // keeps working as the repository is republished, without being redeployed.
+  //
+  // See docs/setup-github-actions-and-pages.md for the full walkthrough.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bdon-fdroid",
+  "main": "index.js",
+  "compatibility_date": "2024-11-01",
+  "observability": { "enabled": true },
+
+  // Where the published repository lives. Everything that is not an APK
+  // request is fetched from here and streamed back untouched.
+  "vars": {
+    "PAGES_ORIGIN": "https://hmtheboy154.github.io/bdon-fdroid"
+  }
+
+  // The address users add to F-Droid is <worker>/fdroid/repo, so this Worker is
+  // a valid repository host on its own. No custom domain is required; the free
+  // *.workers.dev subdomain is enough.
+}

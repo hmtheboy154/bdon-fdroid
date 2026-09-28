@@ -7,9 +7,10 @@ every day. Expect about fifteen minutes, most of it waiting for a download.
 - [2. Generate the signing key](#2-generate-the-signing-key)
 - [3. Add the three secrets](#3-add-the-three-secrets)
 - [4. Run the first build](#4-run-the-first-build)
-- [5. Enable GitHub Pages](#5-enable-github-pages)
-- [6. Point F-Droid at it](#6-point-f-droid-at-it)
-- [7. Confirm the daily job](#7-confirm-the-daily-job)
+- [5. Deploy the redirector (recommended)](#5-deploy-the-redirector-recommended)
+- [6. Enable GitHub Pages](#6-enable-github-pages)
+- [7. Point F-Droid at it](#7-point-f-droid-at-it)
+- [8. Confirm the daily job](#8-confirm-the-daily-job)
 - [Going further](#going-further)
 - [Troubleshooting](#troubleshooting)
 
@@ -104,7 +105,52 @@ Three things happened along the way:
 - The `gh-pages` branch was created and populated with `deploy/`.
 - `repo-info.json` was written, which is where the fingerprint comes from.
 
-## 5. Enable GitHub Pages
+## 5. Deploy the redirector (recommended)
+
+Only the official F-Droid client can follow a repository **mirror**. Neo Store
+and Obtainium both require the APK to be reachable at the repository address
+itself, and GitHub Pages cannot redirect a request. A small Cloudflare Worker in
+front of Pages solves it without storing the 450 MB APK anywhere:
+
+```
+client ──▶ worker/fdroid/repo/<apk>  ──302──▶  publisher's CDN
+client ──▶ worker/fdroid/repo/entry.jar ─────▶  GitHub Pages (proxied, byte for byte)
+```
+
+This needs a free Cloudflare account and takes about five minutes. It is deployed
+**once**; the daily workflow never touches it, because the Worker proxies Pages
+and so keeps working as the repository is republished.
+
+1. Create a free Cloudflare account and install the CLI:
+   `npm install -g wrangler && wrangler login`
+2. Set the Pages origin in [`worker/wrangler.jsonc`](../worker/wrangler.jsonc):
+   ```jsonc
+   "vars": { "PAGES_ORIGIN": "https://<you>.github.io/<your-repo>" }
+   ```
+3. Deploy it, from the `worker/` directory:
+   ```bash
+   npx wrangler deploy
+   ```
+   Note the `*.workers.dev` address it prints. No domain is needed.
+
+4. Set the repository address to the Worker, so clients fetch the index and the
+   APK from the same place. Add a repository **variable** (Settings -> Secrets
+   and variables -> Actions -> *Variables*):
+
+   | Variable | Value |
+   | --- | --- |
+   | `REPO_URL` | `https://<your-worker>.workers.dev/fdroid/repo` |
+   | `REDIRECTOR_URL` | the same, without `/fdroid/repo` |
+
+5. Re-run the **Update repository** workflow, then set Pages to deploy from the
+   `gh-pages` branch as in the next section. The landing page will now show the
+   Worker address, which is the one to give users.
+
+> Without this step everything still works in the official F-Droid client, which
+> falls through to the CDN mirror when Pages returns 404. Neo Store and Obtainium
+> will report the download as failed.
+
+## 6. Enable GitHub Pages
 
 **Settings -> Pages -> Build and deployment**, set:
 
@@ -126,7 +172,7 @@ into the app.
 > run Jekyll over the output, which is free to drop files it does not
 > recognise.
 
-## 6. Point F-Droid at it
+## 7. Point F-Droid at it
 
 In the F-Droid app: **Settings -> Repositories -> +**, then use the URL from the
 landing page, which includes the fingerprint:
@@ -149,7 +195,20 @@ On a browser, you can sanity-check the repository by hand:
 curl -sI https://<you>.github.io/bdon-fdroid/fdroid/repo/entry.jar | head -1
 ```
 
-## 7. Confirm the daily job
+### Other clients
+
+**Neo Store / Droid-ify.** Add the repository under *Settings -> Repos ->
+F-Droid*, and turn on **Mirror rotation**. It needs the redirector address from
+step 5; against plain GitHub Pages its download fails, because Neo Store treats a
+404 as a final answer rather than a reason to try the next mirror.
+
+**Obtainium.** Add the app with source **F-Droid repository** and the repository
+URL, then set *appIdOrName* to `com.bilibili.sirius.official` (or use the app's
+search tab, which lists the package from the index). Obtainium reads
+`index-v2.json` and builds the download URL as `<repo address>/<apk name>`, so it
+also needs the redirector address.
+
+## 8. Confirm the daily job
 
 The workflow runs daily at 03:17 UTC. Nothing about the site is published on a
 schedule, so a check that finds no change is a success, not a failure - the job

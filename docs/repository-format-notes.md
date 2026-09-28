@@ -22,8 +22,8 @@ serves it over HTTP, and makes `fdroidserver` download and verify it.
 | `index-v2.json` | `index-v2.jar` | Current index: metadata plus every version. |
 | `index-v1.json` | `index-v1.jar` | Legacy index, for F-Droid 1.x clients. |
 | `icon.jpg` | - | Repository icon, named by `repo.icon`. |
-| `icons/com.bilibili.sirius.official.jpg` | - | App icon, at the path v1 clients expect. |
-| `<package>/en-US/phoneScreenshots/*.jpg` | - | Optional screenshots. |
+| `icons/<package>.png` | - | App icon, at the path v1 clients expect. |
+| `<package>/en-US/phoneScreenshots/*` | - | Optional screenshots. |
 
 ### How a client reads it
 
@@ -95,6 +95,35 @@ learns the mirror list, so if the two formats disagree, v1 clients try to fetch
 a 450 MB APK from GitHub Pages and fail. `tests/test_indexgen.py` asserts they
 agree.
 
+### The mirror only works in one client
+
+Publishing the CDN as a mirror is necessary but not sufficient, and the gap only
+shows up when a second client is tried:
+
+- **F-Droid** catches a 404 as a `ResponseException` and calls `handleException`,
+  which moves on to the next mirror. This is the behaviour the design above
+  depends on, and it is the only client that has it.
+- **Neo Store** (`Downloader.kt`) has an explicit
+  `response.status == NotFound -> Result(response)` branch, which is a
+  *terminal* result. Mirror rotation only happens in the `catch (e: Exception)`
+  path, so a 404 ends the download. It also picks a mirror at random up front
+  (`mirrors.random()`), so the failure is intermittent rather than consistent.
+- **Obtainium** (`fdroidrepo.dart`) never reads `mirrors`. It reads
+  `index-v2.json`, takes `stripLastPathSegment(indexUrl)` as a base, and builds
+  `'$baseUrl/$apkName'`.
+
+All three therefore need the APK to be reachable at the repository address, and
+GitHub Pages cannot redirect. [`worker/`](../worker/index.js) bridges that: a
+`*.apk` request is answered with a 302 to `repo.mirrors[0].url` and everything
+else is proxied from Pages untouched. Two details matter:
+
+- The index is **signed**, so the proxy must not touch a byte of it. Streaming
+  the upstream response through unmodified is what keeps the signature valid.
+- The redirect target is read from the index rather than hardcoded, so a change
+  of CDN host needs no Worker redeploy. That read is not an extra failure mode: a
+  client must fetch the index before it can request an APK, so the index is
+  already known to be reachable at that point.
+
 ## Index format differences
 
 The two formats are not the same data reshaped, and this is where it is easy to
@@ -118,6 +147,30 @@ Consequences this project has to respect:
   `index-v1.json` at all; the fixture confirms it. They are referenced from
   `localized[locale].phoneScreenshots` as bare filenames, and the client
   resolves those to `/<package>/<locale>/phoneScreenshots/<name>`.
+- **`features` is a list of *mandatory* hardware requirements.** F-Droid
+  refuses to offer the app to a device missing any of them, and
+  `fdroidserver/update.py` only records a `uses-feature` that has an
+  `android:name` **and** is required (`android:required` absent or `"true"`).
+  A feature declared only as `android:glEsVersion` has no name and is never
+  reported - which is also why `androguard.get_features()`, the function
+  fdroidserver actually calls, omits it.
+
+  This project's manifest declares no required features:
+
+  ```xml
+  <uses-feature android:glEsVersion="0x30000"/>                          <!-- no name -->
+  <uses-feature android:name="android.hardware.touchscreen"
+               android:required="false"/>
+  ```
+
+  so the index carries no feature list at all. An earlier version of this
+  project synthesised `glEsVersion196608` and listed every optional feature,
+  and users reported the app as incompatible with devices that ran it fine from
+  Google Play. `tests/test_features.py` pins the rule.
+
+  Because a change to these rules would be masked by the committed cache,
+  `releases.json` records `manifestRules`, the version of the rules that
+  produced each entry. A mismatch discards the cache and re-reads the APK once.
 - **v1 requires `apps[]` to be populated.** `AppV1` carries `name` and
   `summary`; the `packages` entries do not. An empty `apps` array yields a
   repository F-Droid cannot display a name for.
@@ -230,6 +283,33 @@ bite:
   spaces. Those are discarded.
 - Minifiers may escape slashes, so the pattern accepts `https:\/\/...` and the
   escapes are undone afterwards.
+
+### Finding the app icon
+
+The site has no `<link rel=apple-touch-icon>`, and its only `<link rel=icon>` is
+a 16px `favicon.ico` - far too small, and the wrong shape. The real icon is a
+webpack asset referenced by name from a bundle and resolved against the public
+path:
+
+```js
+ga = t.p + "img/icon.e419ff81.png"    where  t.p = "//s1.../gw/"
+```
+
+So both halves are read from the bundles - the public path from the assignment
+`r.p="..."` in the bootstrap, and the asset name by matching `img/*icon*.` - and
+resolved against each other. Nothing is hardcoded, so the content-hash renames the
+site does on every deploy are followed automatically. On the live site exactly one
+asset matches.
+
+Ambiguity is treated as failure rather than a guess: picking the wrong image
+would publish a wrong app icon to every client that syncs the repository.
+`assets.appIconUrl` in `repo.json` is the escape hatch.
+
+Image file extensions are taken from the response's `Content-Type`, never from
+the URL. The Google Play screenshot URLs end in `?w=2560-h1440-rw` with no
+filename at all and serve `image/webp`, so a URL-derived name would have written
+WebP bytes into a `.jpg`. An unrecognised type is skipped with a warning rather
+than guessed.
 
 The scraper refuses to continue if it finds zero or more than one `.apk` URL, or
 if the URL is not on a `biligames.com` host. A silent wrong answer here would

@@ -58,6 +58,10 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Restore the repository signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -136,6 +140,11 @@ jobs:
 
       - name: Run the test suite
         run: python3 -m unittest discover -s tests
+
+      - name: Run the redirector tests
+        # The Worker is deployed once by hand and never touched by this
+        # workflow, so its behaviour is only guarded by CI.
+        run: node --test worker/
 
       - name: Commit the updated release history
         # The history is the cache that makes the next run cheap, and the

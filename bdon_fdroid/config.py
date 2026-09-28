@@ -57,11 +57,18 @@ class AppSettings:
 class AssetSettings:
     """Where the branding images come from.
 
-    ``iconUrl`` and ``screenshotUrls`` are scraped from the official site at
-    build time; the lists in ``repo.json`` are optional overrides/pins.
+    Every field is optional. Leave them empty to have the official site scraped
+    at build time; set one to pin it, which is the escape hatch when the site
+    changes shape and the scraper cannot tell what an image is for.
     """
 
+    #: Repository icon, shown in a client's repository list. Defaults to the
+    #: page's ``og:image``, which is small and square.
     icon_url: str = ""
+    #: The game's own icon. Scraped from the site's image assets, because the
+    #: page has no ``<link rel=apple-touch-icon>`` and its only ``rel=icon`` is a
+    #: 16px favicon.
+    app_icon_url: str = ""
     screenshot_urls: list[str] = field(default_factory=list)
     max_screenshots: int = 4
     feature_graphic_url: str = ""
@@ -142,6 +149,7 @@ def _from_dict(data: dict) -> Config:
     assets = data.get("assets", {})
     config.assets = AssetSettings(
         icon_url=assets.get("iconUrl", ""),
+        app_icon_url=assets.get("appIconUrl", ""),
         screenshot_urls=list(assets.get("screenshotUrls", [])),
         max_screenshots=int(assets.get("maxScreenshots", config.assets.max_screenshots)),
         feature_graphic_url=assets.get("featureGraphicUrl", ""),

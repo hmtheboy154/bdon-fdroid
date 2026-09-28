@@ -48,6 +48,9 @@ class _AxmlBuilder:
         ``attributes`` maps name to a python value.  A name written as
         ``android:foo`` is put in the Android resource namespace, which is how
         real manifests distinguish it from a plain ``package`` attribute.
+
+        A value of ``None`` omits the attribute, which is how a ``uses-feature``
+        declaring only ``glEsVersion`` is expressed.
         """
         payload = bytearray()
         payload += struct.pack("<ii", line, -1)  # lineNumber, comment
@@ -124,6 +127,10 @@ def _manifest_document(**overrides) -> bytes:
         builder.element("uses-permission", {"android:name": permission})
     for feature in overrides.get("features", []):
         builder.element("uses-feature", {"android:name": feature})
+    # `uses-feature` entries given as raw attribute dicts, for the required /
+    # unnamed cases that the real BanG Dream! manifest relies on.
+    for feature in overrides.get("raw_features", []):
+        builder.element("uses-feature", feature)
     return builder.build()
 
 

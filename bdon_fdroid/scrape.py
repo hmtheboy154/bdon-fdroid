@@ -34,6 +34,19 @@ _META = re.compile(
     re.IGNORECASE,
 )
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+# The single-letter variable webpack uses for the public path is not stable
+# across minifier versions, so match the assignment shape instead: ``<id>.p="..."``
+# where the value looks like a URL.
+_PUBLIC_PATH = re.compile(
+    r"""\.\s*p\s*=\s*(?P<q>["'])(?P<path>//[^"']+|https?://[^"']+)(?P=q)"""
+)
+# Asset names webpack emits as "img/<file>". The hash in the middle is the
+# content fingerprint and changes on every deploy, so it is never matched. The
+# slashes may be escaped, as some minifiers write "img\\/icon.png".
+_ICON_ASSET = re.compile(
+    r"""(?<![\w./\\-])img\\?/[\w.-]*icon[\w.-]*\.(?:png|jpe?g|webp|svg)""",
+    re.IGNORECASE,
+)
 _PLAY_STORE = re.compile(
     r"""https?:(?:\\?/){2}play\.google\.com/store/apps/details\?id=[A-Za-z0-9_.]+"""
 )
@@ -77,6 +90,7 @@ class SiteMetadata:
     title: str = ""
     description: str = ""
     og_image: str = ""
+    app_icon: str = ""
     play_store: str = ""
     app_store: str = ""
     bundles: list[str] = field(default_factory=list)
@@ -87,6 +101,7 @@ class SiteMetadata:
             "title": self.title,
             "description": self.description,
             "ogImage": self.og_image,
+            "appIcon": self.app_icon,
             "playStore": self.play_store,
             "appStore": self.app_store,
         }
@@ -213,6 +228,7 @@ def discover(site_url: str = SITE_URL, fetch=get_text) -> tuple[ApkLink, SiteMet
         raise ScrapeError(f"no <script src> bundles found on {site_url}")
     metadata.bundles = bundles
 
+    bundle_bodies: list[str] = []
     candidates: dict[str, str] = {}  # apk url -> bundle that mentioned it
     for bundle_url in bundles:
         if not _allowed(bundle_url):
@@ -222,6 +238,7 @@ def discover(site_url: str = SITE_URL, fetch=get_text) -> tuple[ApkLink, SiteMet
         except HttpError as exc:
             print(f"  warning: skipping {bundle_url}: {exc}")
             continue
+        bundle_bodies.append(body)
         for apk_url in find_apk_urls(body):
             candidates.setdefault(apk_url, bundle_url)
         _collect_store_links(body, metadata)
@@ -244,4 +261,66 @@ def discover(site_url: str = SITE_URL, fetch=get_text) -> tuple[ApkLink, SiteMet
 
     link = describe(apk_url)
     print(f"  found in {bundle_url.rsplit('/', 1)[-1]}")
+
+    metadata.app_icon = find_app_icon(bundle_bodies)
+    if metadata.app_icon:
+        print(f"  app icon: {metadata.app_icon.rsplit('/', 1)[-1]}")
+    else:
+        print("  app icon: not found; falling back to the configured icon")
+
     return link, metadata
+
+
+def find_app_icon(bundle_bodies: list[str]) -> str:
+    """Find the app's own icon among the site's image assets, or return "".
+
+    The site has no ``<link rel=apple-touch-icon>`` and its only ``<link
+    rel=icon>`` is a 16px ``favicon.ico``, so the real icon is not in the HTML.
+    It is a webpack asset, referenced by name from a bundle and resolved against
+    the public path, e.g.::
+
+        ga = t.p + "img/icon.e419ff81.png"   where  t.p = "//s1.../gw/"
+
+    Both the public path and the asset name are read from the bundles, so this
+    follows the site through content-hash renames without hardcoding anything.
+    Ambiguity is treated as failure rather than a guess: picking the wrong image
+    would publish a wrong app icon to every client that syncs the repository.
+    """
+    public_path = _webpack_public_path(bundle_bodies)
+    if not public_path:
+        return ""
+    candidates = set()
+    for body in bundle_bodies:
+        # Undo any minifier escaping before resolving against the public path.
+        candidates.update(name.replace("\\/", "/") for name in _ICON_ASSET.findall(body))
+    if not candidates:
+        return ""
+    if len(candidates) > 1:
+        raise ScrapeError(
+            "found several candidate app icons in the site's bundles; refusing to "
+            "guess. Set assets.appIconUrl in repo.json to pin one.\n  "
+            + "\n  ".join(sorted(candidates))
+        )
+    name = candidates.pop()
+    absolute = "https:" + public_path if public_path.startswith("//") else public_path
+    return urllib.parse.urljoin(absolute, name)
+
+
+def _webpack_public_path(bundle_bodies: list[str]) -> str:
+    """Return the public path webpack resolves asset names against."""
+    paths: list[str] = []
+    for body in bundle_bodies:
+        paths.extend(match.group("path") for match in _PUBLIC_PATH.finditer(body))
+    unique = set(paths)
+    if not unique:
+        return ""
+    if len(unique) > 1:
+        # Several roots would be a bundle split across hosts; the icon could
+        # live under any of them, so decline rather than pick one.
+        raise ScrapeError(
+            "the site's bundles declare several public paths; set "
+            "assets.appIconUrl in repo.json to pin the icon.\n  "
+            + "\n  ".join(sorted(unique))
+        )
+    return unique.pop()
+

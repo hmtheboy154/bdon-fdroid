@@ -121,9 +121,20 @@ def get_text(url: str, timeout: int = DEFAULT_TIMEOUT) -> str:
 
 def get_bytes(url: str, timeout: int = DEFAULT_TIMEOUT) -> bytes:
     """Fetch ``url`` and return the whole body."""
+    return get_bytes_with_type(url, timeout)[0]
+
+
+def get_bytes_with_type(url: str, timeout: int = DEFAULT_TIMEOUT) -> tuple[bytes, str]:
+    """Fetch ``url``, returning ``(body, content_type)``.
+
+    The type is needed to name an image file correctly: some CDNs serve images
+    from URLs with no filename in them at all, so the extension cannot be
+    derived from the path.
+    """
     try:
         with _open(url, "GET", timeout) as response:
-            return response.read()
+            content_type = response.headers.get("Content-Type") or ""
+            return response.read(), content_type
     except _TRANSPORT_ERRORS as exc:
         raise HttpError(f"GET {url} failed: {exc}") from exc
 
