@@ -1,0 +1,59 @@
+{
+  "stateVersion": 1,
+  "generator": "bdon-fdroid/1.0.0",
+  "packageName": "com.bilibili.sirius.official",
+  "lastChecked": 1790613763917,
+  "lastChanged": 1790613694510,
+  "releases": [
+    {
+      "url": "https://l12-pkg-download.biligames.com/sirius/apk/BanGDreamOurNotes_1.0.1_2026_09_17_22_42_02.apk",
+      "fileName": "BanGDreamOurNotes_1.0.1_2026_09_17_22_42_02.apk",
+      "size": 446890829,
+      "sha256": "c0b6a1541e4562533aaeb2c65062cb6202913b2aec5aae80d371c4fc04409fa9",
+      "versionCode": 25,
+      "versionName": "1.0.1",
+      "added": 1790613694509,
+      "mirrorBase": "https://l12-pkg-download.biligames.com/sirius/apk/",
+      "signer": "bf683e367551a3f629b90e16a63b315af74e387bcc5d94f26dcd626e7eea3637",
+      "minSdkVersion": 26,
+      "targetSdkVersion": 36,
+      "permissions": [
+        "android.permission.VIBRATE",
+        "com.android.vending.BILLING",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE",
+        "com.google.android.gms.permission.AD_ID",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_ADSERVICES_AD_ID",
+        "android.permission.ACCESS_ADSERVICES_ATTRIBUTION",
+        "android.permission.ACCESS_ADSERVICES_TOPICS",
+        "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE",
+        "com.bilibili.sirius.official.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+        "android.permission.CHANGE_NETWORK_STATE",
+        "android.permission.GET_TASKS",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "com.samsung.android.mapsagent.permission.READ_APP_INFO",
+        "com.google.android.c2dm.permission.RECEIVE",
+        "android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE"
+      ],
+      "features": [
+        "glEsVersion196608",
+        "android.hardware.vulkan.version",
+        "android.hardware.touchscreen",
+        "android.hardware.touchscreen.multitouch",
+        "android.hardware.touchscreen.multitouch.distinct"
+      ],
+      "etag": "588a0eb9289e119108e26fb58623dd98",
+      "lastModified": "Fri, 18 Sep 2026 10:45:38 GMT",
+      "versionHint": "1.0.1",
+      "buildStamp": "2026 09 17 22 42 02"
+    }
+  ]
+}

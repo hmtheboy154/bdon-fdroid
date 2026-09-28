@@ -1,0 +1,29 @@
+# Never commit the repository signing key: anyone holding it can impersonate
+# this F-Droid repository. The workflow restores it from the KEYSTORE_BASE64
+# secret instead (see scripts/init-repo-key.sh).
+keystore.p12
+*.jks
+*.keystore
+
+# Build output
+deploy/
+dist/
+
+# Downloaded APKs are never stored, but keep this as a safety net
+*.apk
+*.apk.part
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Editors and OS cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/

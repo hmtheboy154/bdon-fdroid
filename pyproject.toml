@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bdon-fdroid"
+version = "1.0.0"
+description = "Scrape the official BanG Dream! Our Notes website and publish a static F-Droid repository"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["fdroid", "android", "scraper", "github-pages", "bang-dream"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Topic :: Utilities",
+]
+# Intentionally no runtime dependencies: the daily job must not need a
+# 'pip install' step. Signing uses the JDK's jarsigner, which is preinstalled
+# on GitHub's runners.
+dependencies = []
+
+[project.scripts]
+bdon-fdroid = "bdon_fdroid.cli:main"
+
+[tool.setuptools]
+packages = ["bdon_fdroid"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]

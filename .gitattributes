@@ -1,0 +1,8 @@
+# Normalise line endings in the repository.
+* text=auto
+
+# Shell scripts must keep LF endings, or the shebang breaks on Linux.
+*.sh text eol=lf
+
+# Keep the committed release cache and the JSON index templates readable.
+*.json text eol=lf

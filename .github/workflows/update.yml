@@ -1,0 +1,163 @@
+name: Update repository
+
+# Check the publisher's website once a day. The APK is only downloaded when the
+# download URL changes, so an ordinary run costs a few HTTP requests rather than
+# hundreds of megabytes.
+on:
+  schedule:
+    # 03:17 UTC daily. A slightly off-the-hour minute avoids the rush on
+    # GitHub's scheduler, which is busiest on the hour.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      force_download:
+        description: 'Re-download the APK even if the cached hash looks current'
+        type: boolean
+        default: false
+  # Lets another workflow (or a dependabot-style bot) trigger a check on demand.
+  repository_dispatch:
+    types: [refresh]
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  update:
+    name: Scrape, build, sign, publish
+    runs-on: ubuntu-latest
+    # A first run, or any run where the CDN hostname changed, downloads a
+    # ~450 MB APK. Generous, because a timeout mid-download is wasted work.
+    timeout-minutes: 90
+    outputs:
+      changed: ${{ steps.build.outputs.changed }}
+      version_name: ${{ steps.build.outputs.version_name }}
+      version_code: ${{ steps.build.outputs.version_code }}
+      fingerprint: ${{ steps.build.outputs.fingerprint }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The index is signed with the JDK's jarsigner. ubuntu-latest already
+      # ships one, but pinning setup-java makes the requirement explicit and
+      # guards against a runner image dropping it.
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Restore the repository signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "::error::KEYSTORE_BASE64 is not set. Run scripts/init-repo-key.sh"
+            echo "::error::locally and add it under Settings -> Secrets -> Actions."
+            exit 1
+          fi
+          umask 077
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/keystore.p12"
+          echo "restored keystore ($(stat -c%s "$RUNNER_TEMP/keystore.p12") bytes)"
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/keystore.p12" >> "$GITHUB_ENV"
+
+      - name: Work out the repository address
+        id: address
+        run: |
+          set -euo pipefail
+          # A repository *variable* wins, so a custom domain or a renamed repo
+          # needs no workflow edit.
+          address="${REPO_URL:-}"
+          if [ -z "$address" ]; then
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            name="${GITHUB_REPOSITORY#*/}"
+            # The /fdroid/repo suffix is expected by several client features.
+            address="https://${owner}.github.io/${name}/fdroid/repo"
+          fi
+          echo "Repository address: $address"
+          echo "url=$address" >> "$GITHUB_OUTPUT"
+
+      - name: Build the repository
+        id: build
+        env:
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+          REPO_KEYALIAS: ${{ secrets.REPO_KEYALIAS }}
+          REPO_URL: ${{ steps.address.outputs.url }}
+        run: |
+          set -euo pipefail
+          args=(build --state releases.json --deploy deploy --repo-url "$REPO_URL")
+          if [ "${{ inputs.force_download }}" = "true" ]; then
+            args+=(--force-download)
+          fi
+          python3 -m bdon_fdroid "${args[@]}"
+
+          # Read the results out of the summary the build just wrote, rather
+          # than re-deriving them from keytool and releases.json.
+          eval "$(python3 - <<'PY'
+          import json, shlex
+          info = json.load(open("deploy/repo-info.json"))
+          latest = info["latest"] or {}
+          print(f"changed={'true' if info['changed'] else 'false'}")
+          print(f"version_name={shlex.quote(str(latest.get('versionName', '')))}")
+          print(f"version_code={shlex.quote(str(latest.get('versionCode', '')))}")
+          print(f"fingerprint={shlex.quote(info['signerFingerprint'] or '')}")
+          PY
+          )"
+          {
+            echo "changed=$changed"
+            echo "version_name=$version_name"
+            echo "version_code=$version_code"
+            echo "fingerprint=$fingerprint"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### F-Droid repository updated"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Add this URL | \`$REPO_URL\` |"
+            echo "| Key fingerprint | \`${fingerprint:-not signed}\` |"
+            echo "| Latest version | $version_name (versionCode $version_code) |"
+            echo ""
+            echo "Users add the repository in F-Droid under Settings -> Repositories and"
+            echo "should compare the fingerprint above with what the app displays."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the test suite
+        run: python3 -m unittest discover -s tests
+
+      - name: Commit the updated release history
+        # The history is the cache that makes the next run cheap, and the
+        # changelog for anyone watching this repository.
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- releases.json; then
+            echo "release history unchanged"
+            exit 0
+          fi
+          git add releases.json
+          git commit -m "chore: record release ${{ steps.build.outputs.version_name }}" \
+                      -m "Automated by .github/workflows/update.yml"
+          git push
+
+      - name: Publish to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./deploy
+          # A single commit of history: every run replaces the site wholesale,
+          # so keeping old commits would only bloat the branch.
+          force_orphan: true

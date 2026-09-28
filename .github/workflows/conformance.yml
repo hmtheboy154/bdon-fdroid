@@ -1,0 +1,112 @@
+name: Conformance
+
+# Prove that the repository this project publishes is one a real F-Droid client
+# can actually consume.
+#
+# The daily update job deliberately has no Python dependencies, so this
+# workflow exists to install fdroidserver - the reference implementation - in a
+# throwaway virtualenv and run the conformance suite against it. It also
+# re-checks the *published* site, which catches problems a build-time check
+# cannot, such as GitHub Pages serving the wrong branch.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, Monday morning. A slow belt-and-braces check of the live site.
+    - cron: '41 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: 'Published repository address to check (blank = derive it)'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run the test suite
+        run: python3 -m unittest discover -s tests -v
+
+  conformance:
+    name: Verify against fdroidserver
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install fdroidserver
+        # The reference implementation. Installed into a virtualenv so it can
+        # never leak into the update job's dependency-free environment.
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/fdcheck"
+          "$RUNNER_TEMP/fdcheck/bin/pip" install --quiet --disable-pip-version-check \
+            "git+https://gitlab.com/fdroid/fdroidserver.git"
+          "$RUNNER_TEMP/fdcheck/bin/python" -c "import fdroidserver; print('fdroidserver ready')"
+
+      - name: Run the conformance suite
+        # Builds a repository, signs it, serves it over HTTP and makes
+        # fdroidserver download and verify it - including proving that a
+        # tampered index is rejected.
+        run: '"$RUNNER_TEMP/fdcheck/bin/python" -m unittest discover -s tests -v'
+
+  published:
+    name: Check the live site
+    runs-on: ubuntu-latest
+    # Only meaningful once a repository has actually been published.
+    if: ${{ github.event_name == 'schedule' || inputs.repo_url != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install fdroidserver
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/fdcheck"
+          "$RUNNER_TEMP/fdcheck/bin/pip" install --quiet --disable-pip-version-check \
+            "git+https://gitlab.com/fdroid/fdroidserver.git"
+
+      - name: Verify the published repository
+        env:
+          REPO_URL: ${{ inputs.repo_url }}
+        run: |
+          set -euo pipefail
+          address="${REPO_URL:-https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/fdroid/repo}"
+
+          # The fingerprint is public: the landing page displays it precisely so
+          # that anyone can check what F-Droid was told to trust.
+          fingerprint=$(curl -fsSL "${address%/fdroid/repo}/repo-info.json" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["signerFingerprint"] or "")')
+
+          if [ -z "$fingerprint" ]; then
+            echo "::notice::no signing fingerprint published yet, nothing to verify"
+            exit 0
+          fi
+          echo "checking $address against $fingerprint"
+          "$RUNNER_TEMP/fdcheck/bin/python" -m bdon_fdroid verify \
+            --repo-url "$address" --fingerprint "$fingerprint"

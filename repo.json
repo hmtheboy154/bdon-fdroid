@@ -1,0 +1,37 @@
+{
+  "packageName": "com.bilibili.sirius.official",
+  "siteUrl": "https://bdon.biligames.com/",
+
+  "repo": {
+    "_comment": "address must be the full URL users add in F-Droid, ending in /fdroid/repo. Set REPO_URL (or --repo-url) to override; the GitHub Actions workflow derives it from the repository owner if left empty.",
+    "address": "",
+    "name": "BanG Dream! Our Notes",
+    "description": "Official Android builds of BanG Dream! Our Notes, indexed straight from the publisher's website. The APKs are downloaded from the official bilibili CDN, not from this site.",
+    "icon": "icon.jpg",
+    "mirrorCountryCode": "CN",
+    "maxAge": 0
+  },
+
+  "app": {
+    "name": "BanG Dream! Our Notes",
+    "summary": "GEKISO Gameplay x Adventure rhythm game",
+    "description": "BanG Dream! Our Notes is a rhythm adventure game from Craft Egg and bilibili, featuring the bands MyGO!!!!! and Ave Mujica. This repository indexes the official English, Taiwanese, Hong Kong and Southeast Asian builds distributed on the publisher's own website; the APKs themselves are downloaded directly from bilibili's servers.",
+    "license": "Proprietary",
+    "categories": ["Multimedia"],
+    "website": "https://bdon.biligames.com/",
+    "authorName": "Craft Egg Inc. / bilibili",
+    "issueTracker": "",
+    "sourceCode": "",
+    "translation": ""
+  },
+
+  "assets": {
+    "_comment": "iconUrl defaults to the og:image scraped from the official site. screenshotUrls is an optional list of portrait images; the ones used by the live site are content-hashed, so prefer letting the scraper find the icon and only pin screenshots here if you want a specific set.",
+    "iconUrl": "",
+    "screenshotUrls": [],
+    "maxScreenshots": 4,
+    "featureGraphicUrl": ""
+  },
+
+  "keepReleases": 20
+}
