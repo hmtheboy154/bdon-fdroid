@@ -227,6 +227,9 @@ tampered index is rejected.
 - [Repository format notes](./docs/repository-format-notes.md) - the files that
   are generated, the conventions each format follows, and why the CDN mirror
   trick is necessary.
+- [AGENTS.md](./AGENTS.md) - the constraints that are load-bearing but not
+  obvious from the code. Read it before touching the index, the scraper or the
+  workflows.
 
 ## Notes and limitations
 
