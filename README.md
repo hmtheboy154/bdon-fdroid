@@ -237,8 +237,7 @@ listing linked from the same page is a *different application*,
 
 That is not a typo. F-Droid keys everything on the package name, and the
 publisher's own client would refuse to update across two application ids, so the
-repository indexes the build the site actually distributes - the one an EN/TW/HK
-and Southeast Asian player gets.
+repository indexes the build the site actually distributes.
 
 Related: `versionCode` is not derivable from the URL either. The current release
 is `1.0.1` at `versionCode 25`, which is why the APK has to be read at least once
