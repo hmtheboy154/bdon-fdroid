@@ -65,6 +65,13 @@ on the runner. If you need a parser, write it.
 6. **`"license": "Proprietary"` is intentional** even though it is not an SPDX
    identifier and fdroidserver's `lint` would flag it. We use fdroidserver as a
    verifier, not a linter, and the honest value beats a fake open-source one.
+7. **Do not hardcode this repository's URL into the code.** Every external
+   address is either in `repo.json` or derived at runtime, because a fork
+   publishes its own index and must not link back here. The landing page's
+   footer link is `projectUrl`; the Worker's CDN target comes out of
+   `repo.mirrors[0].url`; `PAGES_ORIGIN` is a Cloudflare variable with a
+   committed default. There is a test asserting `landing.py` contains no
+   `github.com` string at all.
 
 ## The load-bearing facts
 

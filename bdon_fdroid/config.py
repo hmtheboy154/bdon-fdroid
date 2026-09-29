@@ -95,6 +95,11 @@ class AssetSettings:
 class Config:
     package_name: str = PACKAGE_NAME
     site_url: str = SITE_URL
+    #: Where the tooling that produced this index lives, linked from the landing
+    #: page footer.  Deliberately empty by default rather than pointing at this
+    #: project's repository: a fork publishes its own index, and a hardcoded
+    #: link would send its visitors back here.  Unset renders as plain text.
+    project_url: str = ""
     repo: RepoSettings = field(default_factory=RepoSettings)
     app: AppSettings = field(default_factory=AppSettings)
     assets: AssetSettings = field(default_factory=AssetSettings)
@@ -150,6 +155,7 @@ def _merge(target: dict, overrides: dict) -> None:
 
 def _from_dict(data: dict) -> Config:
     config = Config()
+    config.project_url = data.get("projectUrl", "")
     repo = data.get("repo", {})
     config.repo = RepoSettings(
         name=repo.get("name", config.repo.name),
