@@ -117,38 +117,80 @@ client ──▶ worker/fdroid/repo/<apk>  ──302──▶  publisher's CDN
 client ──▶ worker/fdroid/repo/entry.jar ─────▶  GitHub Pages (proxied, byte for byte)
 ```
 
-This needs a free Cloudflare account and takes about five minutes. It is deployed
-**once**; the daily workflow never touches it, because the Worker proxies Pages
-and so keeps working as the repository is republished.
+This needs a free Cloudflare account and takes about five minutes. After the first
+deployment it is handled by a workflow; the daily update job never touches it,
+because the Worker proxies Pages and so keeps working as the repository is
+republished.
 
-1. Create a free Cloudflare account and install the CLI:
-   `npm install -g wrangler && wrangler login`
-2. Set the Pages origin in [`worker/wrangler.jsonc`](../worker/wrangler.jsonc):
-   ```jsonc
-   "vars": { "PAGES_ORIGIN": "https://<you>.github.io/<your-repo>" }
-   ```
-3. Deploy it, from the `worker/` directory:
-   ```bash
-   npx wrangler deploy
-   ```
-   Note the `*.workers.dev` address it prints. No domain is needed.
+### 5.1 Deploy once by hand
 
-4. Set the repository address to the Worker, so clients fetch the index and the
-   APK from the same place. Add a repository **variable** (Settings -> Secrets
-   and variables -> Actions -> *Variables*):
+The first deploy is manual for one reason only: it claims the global
+`bdon-fdroid.workers.dev` name, and a clearer error in your own terminal beats a
+confusing one in a CI log.
 
-   | Variable | Value |
-   | --- | --- |
-   | `REPO_URL` | `https://<your-worker>.workers.dev/fdroid/repo` |
-   | `REDIRECTOR_URL` | the same, without `/fdroid/repo` |
+```bash
+npm install -g wrangler
+wrangler login
+cd worker
+npx wrangler deploy
+```
 
-5. Re-run the **Update repository** workflow, then set Pages to deploy from the
-   `gh-pages` branch as in the next section. The landing page will now show the
-   Worker address, which is the one to give users.
+Note the `*.workers.dev` address it prints. No domain is needed.
 
-> Without this step everything still works in the official F-Droid client, which
-> falls through to the CDN mirror when Pages returns 404. Neo Store and Obtainium
-> will report the download as failed.
+### 5.2 Let the workflow take over
+
+Add two secrets so **Deploy redirector** can publish changes to `worker/`:
+
+| Secret | Value |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | see below |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard -> Workers & Pages -> Account ID |
+
+**On the token: a plain API token works, but scoping it is highly recommended.**
+Any token with Workers write access will deploy correctly. A token limited to
+*Workers Scripts: Edit* on this one account is strictly better, and takes a minute
+more to set up (Cloudflare dashboard -> My Profile -> API Tokens -> Create
+Token -> *Edit Cloudflare Workers* template).
+
+Worth being precise about what a leaked token can reach: it can rewrite the
+redirector, and so redirect downloads of this app. It cannot read your F-Droid
+signing key, which is a separate GitHub secret this token has no access to, and
+it cannot reach GitHub Pages. The blast radius is therefore one Worker, not your
+repository.
+
+### 5.3 Configure the addresses
+
+Set repository **variables** (Settings -> Secrets and variables -> Actions ->
+*Variables*), so users are given the address that works in every client:
+
+| Variable | Value |
+| --- | --- |
+| `REPO_URL` | `https://<your-worker>.workers.dev/fdroid/repo` |
+| `REDIRECTOR_URL` | the same, without `/fdroid/repo` |
+
+`REDIRECTOR_URL` is not optional in practice: the conformance workflow fails if
+it is unset, rather than skipping the check. A silently-unchecked redirector is
+how a broken downloader survives for weeks - the official client keeps working
+through the mirror, so only a Neo Store or Obtainium user notices.
+
+Then re-run **Update repository**, and set Pages to deploy from the `gh-pages`
+branch as in the next section.
+
+### 5.4 Forks
+
+A fork needs no configuration: **Deploy redirector** derives the Pages origin
+from the repository owner and name. Set a `PAGES_ORIGIN` repository variable only
+if that derivation would be wrong - a custom domain, or a move to organisation
+Pages. The value committed in [`worker/wrangler.jsonc`](../worker/wrangler.jsonc)
+is the local-development default, used by `npx wrangler dev`, which has no GitHub
+context to derive from.
+
+Note that `--var` *replaces* the configured value rather than merging with it, so
+`PAGES_ORIGIN` has to name the whole origin.
+
+> Without a working redirector everything still works in the official F-Droid
+> client, which falls through to the CDN mirror when Pages returns 404. Neo Store
+> and Obtainium will report the download as failed.
 
 ## 6. Enable GitHub Pages
 
@@ -342,6 +384,23 @@ curl -s https://<you>.github.io/bdon-fdroid/repo-info.json \
 repositories with no activity for 60 days. Opening a pull request or pushing
 anything reactivates it. The job also has a 90-minute timeout, generous enough
 for a full download.
+
+**`REDIRECTOR_URL is not set`** - the conformance workflow fails deliberately
+rather than skipping. The check exists because a silently-unchecked redirector is
+how a broken downloader survives: the official F-Droid client keeps working
+through the CDN mirror, so only someone on Neo Store or Obtainium would find
+out. Set the variable (step 5.3) and re-run.
+
+**`no redirect from <worker>/<apk>`** - the Worker is not answering, or
+`PAGES_ORIGIN` points somewhere that no longer serves the repository. Check the
+Worker exists and the origin is right:
+```bash
+curl -sI https://<your-worker>.workers.dev/fdroid/repo/entry.jar | head -1
+```
+
+**The Worker deploy fails in CI** - `Deploy redirector` needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Both are secrets, not
+variables, and both are listed in step 5.2.
 
 **Something is wrong with the published repository** - the conformance workflow
 checks the live site weekly, and can be run on demand with a specific address:

@@ -110,9 +110,6 @@ jobs:
       - name: Verify the published repository
         env:
           REPO_URL: ${{ inputs.repo_url }}
-          # Set this repository variable to the redirector's address once the
-          # Worker is deployed, to have it checked too.
-          REDIRECTOR_URL: ${{ vars.REDIRECTOR_URL }}
         run: |
           set -euo pipefail
           address="${REPO_URL:-https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/fdroid/repo}"
@@ -131,21 +128,33 @@ jobs:
             --repo-url "$address" --fingerprint "$fingerprint"
 
       - name: Check the redirector serves the APK
-        if: ${{ vars.REDIRECTOR_URL != '' }}
+        # Deliberately not conditional. Skipping this when REDIRECTOR_URL is
+        # unset is how a broken redirector sits there unnoticed: the job goes
+        # green, the official client still works because it follows the mirror,
+        # and only a user on Neo Store or Obtainium finds out. Same failure
+        # class as a stale metadata cache passing CI.
         env:
           REDIRECTOR_URL: ${{ vars.REDIRECTOR_URL }}
         run: |
           set -euo pipefail
-          # The APK name has to be discovered rather than hardcoded: it changes
-          # with every release, and this is the same lookup the scraper does.
+
+          if [ -z "$REDIRECTOR_URL" ]; then
+            echo "::error::REDIRECTOR_URL is not set, so the redirector is unchecked."
+            echo "::error::Neo Store and Obtainium cannot install the app without it."
+            echo "::error::See docs/setup-github-actions-and-pages.md, step 5."
+            exit 1
+          fi
+
+          # The APK name changes with every release, so discover it from the
+          # live index rather than hardcoding it.
           apk=$(python3 -c '
           import json, sys, urllib.request
           index = json.load(urllib.request.urlopen(sys.argv[1] + "/index-v2.json"))
           versions = next(iter(index["packages"].values()))["versions"]
           print(next(iter(versions.values()))["file"]["name"].lstrip("/"))
           ' "$REDIRECTOR_URL")
-
           echo "checking that $REDIRECTOR_URL/$apk redirects to the publisher's CDN"
+
           location=$(curl -sS -o /dev/null -w '%{redirect_url}' "$REDIRECTOR_URL/$apk")
 
           if [ -z "$location" ]; then

@@ -1,0 +1,134 @@
+name: Deploy redirector
+
+# Deploy the Cloudflare Worker that fronts the repository.
+#
+# Only the official F-Droid client can follow a repository mirror. Neo Store
+# answers a 404 with a terminal result, and Obtainium never reads `mirrors` at
+# all, so both need the APK to be reachable at the repository address - and
+# GitHub Pages is static and cannot redirect. This Worker does:
+#
+#   <repo>/<name>.apk  ->  302 to the publisher's CDN
+#   anything else      ->  proxied from GitHub Pages, byte for byte
+#
+# The Worker is a separate workflow from the daily update, because it changes
+# only when this code changes - it proxies Pages, so it keeps working as the
+# repository is republished without being redeployed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/redirector.yml'
+  # The very first deploy has to be done by hand to claim the workers.dev name;
+  # after that, pushes to worker/ keep it current. See
+  # docs/setup-github-actions-and-pages.md.
+  workflow_dispatch:
+
+concurrency:
+  group: redirector-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  deploy:
+    name: Deploy the Worker
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_url: ${{ steps.deploy.outputs.deployment-url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run the Worker tests
+      # Never deploy code that does not pass its own tests.
+      - run: node --test worker/
+
+      - name: Work out the Pages origin
+        id: origin
+        env:
+          # Escape hatch for a custom domain, or a move to organisation Pages,
+          # where deriving from the repository owner would be wrong.
+          PAGES_ORIGIN: ${{ vars.PAGES_ORIGIN }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$PAGES_ORIGIN" ]; then
+            # An explicit --var *replaces* the value in wrangler.jsonc rather
+            # than merging, so it has to name the whole origin.
+            echo "using the PAGES_ORIGIN variable: $PAGES_ORIGIN"
+            echo "override=$PAGES_ORIGIN" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Deriving means a fork works with no configuration at all. It is
+          # passed explicitly, rather than left to the default in
+          # wrangler.jsonc, so the job summary records what was actually
+          # deployed instead of leaving it implicit.
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          name="${GITHUB_REPOSITORY#*/}"
+          derived="https://${owner}.github.io/${name}"
+          echo "derived from the repository owner: $derived"
+          echo "override=$derived" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy
+        id: deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          # Passing the origin through --var keeps it in the deploy command, and
+          # therefore in this run's log, rather than hidden in a committed file.
+          command: deploy --var PAGES_ORIGIN:${{ steps.origin.outputs.override }}
+          # A custom domain, if one is ever configured, should be visible here.
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Record the deployment
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment-url }}
+          PAGES_ORIGIN: ${{ steps.origin.outputs.override }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Redirector deployed"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Worker | \`${DEPLOYMENT_URL:-see the run log}\` |"
+            echo "| Pages origin | \`$PAGES_ORIGIN\` |"
+            echo "| Repository address | \`${DEPLOYMENT_URL:-<worker>}/fdroid/repo\` |"
+            echo ""
+            echo "Set \`REPO_URL\` and \`REDIRECTOR_URL\` repository variables to that"
+            echo "address so the update job publishes against it."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    name: Check the deployed redirector
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Confirm the APK request is redirected
+        env:
+          DEPLOYMENT_URL: ${{ needs.deploy.outputs.deployment-url }}
+        run: |
+          set -euo pipefail
+          base="${DEPLOYMENT_URL%/}"
+          if [ -z "$base" ]; then
+            echo "::notice::wrangler reported no deployment URL; skipping"
+            exit 0
+          fi
+
+          # The Worker serves the repository at the same path as Pages, so the
+          # index has to be reachable through it before anything else is worth
+          # checking.
+          echo "checking $base/fdroid/repo/entry.jar"
+          curl -fsS -o /dev/null -w '  entry.jar: HTTP %{http_code}\n' \
+            "$base/fdroid/repo/entry.jar"

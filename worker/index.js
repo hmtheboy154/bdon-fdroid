@@ -28,8 +28,8 @@
  * is not an extra failure mode: a client has to fetch the index before it can
  * ask for an APK, so the index is already known to be reachable at that point.
  *
- * Deploy once with `npx wrangler deploy`; see
- * docs/setup-github-actions-and-pages.md.
+ * Deployed by .github/workflows/redirector.yml, and once by hand for the first
+ * deploy; see docs/setup-github-actions-and-pages.md.
  */
 
 const MIRROR_TTL_MS = 10 * 60 * 1000;

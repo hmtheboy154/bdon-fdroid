@@ -1,9 +1,10 @@
 {
   // Cloudflare Worker configuration.
   //
-  // Deploy ONCE with `npx wrangler deploy` from this directory. The daily
-  // update workflow never touches it: the Worker proxies GitHub Pages, so it
-  // keeps working as the repository is republished, without being redeployed.
+  // Deployed by .github/workflows/redirector.yml whenever this directory
+  // changes, and by hand for the first deploy (to claim the workers.dev name).
+  // The daily update workflow never touches it: the Worker proxies GitHub
+  // Pages, so it keeps working as the repository is republished.
   //
   // See docs/setup-github-actions-and-pages.md for the full walkthrough.
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -14,6 +15,12 @@
 
   // Where the published repository lives. Everything that is not an APK
   // request is fetched from here and streamed back untouched.
+  //
+  // This is the local-development default, used by `npx wrangler dev`, which
+  // has no GitHub context to derive the origin from. In CI the workflow derives
+  // it from the repository owner and name, and passes it with --var, so a fork
+  // needs no configuration. Set a PAGES_ORIGIN repository variable to override
+  // that - useful for a custom domain, where derivation would be wrong.
   "vars": {
     "PAGES_ORIGIN": "https://hmtheboy154.github.io/bdon-fdroid"
   }

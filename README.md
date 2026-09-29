@@ -106,8 +106,8 @@ client ──▶ worker/fdroid/repo/entry.jar  ────────▶  GitH
 Still nothing stored by us: the 450 MB comes from bilibili and the index comes
 from Pages. The Worker reads its redirect target from `repo.mirrors[0].url`
 rather than hardcoding it, so if the publisher moves the CDN the scraper picks it
-up and the Worker follows with no redeploy. It is deployed once by hand - the
-daily workflow never touches it. See
+up and the Worker follows with no redeploy. It is deployed by its own workflow
+whenever `worker/` changes; the daily update never touches it. See
 [step 5 of the setup guide](./docs/setup-github-actions-and-pages.md#5-deploy-the-redirector-recommended).
 
 ## How a run works
