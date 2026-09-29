@@ -79,16 +79,37 @@ jobs:
 
       - name: Work out the repository address
         id: address
+        env:
+          # Repository *variables* are not exposed as plain environment
+          # variables: a bare $REPO_URL here is always empty, which silently
+          # fell back to the Pages address and published a repository that
+          # only the official F-Droid client could install from. It has to be
+          # interpolated explicitly.
+          REPO_URL_VARIABLE: ${{ vars.REPO_URL }}
+          REDIRECTOR_URL: ${{ vars.REDIRECTOR_URL }}
         run: |
           set -euo pipefail
-          # A repository *variable* wins, so a custom domain or a renamed repo
-          # needs no workflow edit.
-          address="${REPO_URL:-}"
+
+          if [ -n "$REDIRECTOR_URL" ] && [ -z "$REPO_URL_VARIABLE" ]; then
+            echo "::error::REDIRECTOR_URL is set but REPO_URL is not."
+            echo "::error::Publishing the GitHub Pages address would advertise a link"
+            echo "::error::that fails in Neo Store and Obtainium, which cannot follow a"
+            echo "::error::repository mirror. Set REPO_URL to"
+            echo "::error::  $REDIRECTOR_URL/fdroid/repo"
+            exit 1
+          fi
+
+          # An explicit address wins, so a custom domain, a renamed repository or
+          # a redirector needs no workflow edit.
+          address="$REPO_URL_VARIABLE"
           if [ -z "$address" ]; then
             owner="${GITHUB_REPOSITORY_OWNER,,}"
             name="${GITHUB_REPOSITORY#*/}"
             # The /fdroid/repo suffix is expected by several client features.
             address="https://${owner}.github.io/${name}/fdroid/repo"
+            echo "::warning::no REPO_URL variable set; publishing the plain Pages"
+            echo "::warning::address. Only the official F-Droid client can install from"
+            echo "::warning::this; see docs/setup-github-actions-and-pages.md step 5."
           fi
           echo "Repository address: $address"
           echo "url=$address" >> "$GITHUB_OUTPUT"

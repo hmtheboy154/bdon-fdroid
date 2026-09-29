@@ -165,6 +165,50 @@ class HistoryTests(unittest.TestCase):
             self.assertIn(release.url, document)
 
 
+class PackageNameTests(unittest.TestCase):
+    """The package name has to be visible, and Obtainium needs it directly.
+
+    Obtainium cannot list the apps in a third-party F-Droid repository, so a
+    reader has to type the package name in by hand. Worse, it is *not* the one
+    on the Google Play listing, so guessing from there does not work.
+    """
+
+    def test_package_name_is_shown_under_latest_version(self):
+        text = _text_of(_render())
+        self.assertIn("Package", text)
+        self.assertIn("com.bilibili.sirius.official", text)
+
+    def test_package_name_is_its_own_row_not_part_of_the_filename(self):
+        document = _render()
+        # The old row showed the APK filename with its extension stripped, which
+        # is not the package name and did not help anyone.
+        self.assertNotIn("BanGDreamOurNotes_1.0.1_2026_09_17_22_42_02", text_before_latest(document))
+
+    def test_an_appid_link_is_offered_for_obtainium(self):
+        hrefs = _hrefs(_render())
+        expected = f"{REPO_URL}?appId=com.bilibili.sirius.official"
+        self.assertIn(expected, hrefs)
+        for href in hrefs:
+            # Obtainium keeps the appId parameter and pre-fills the field, so
+            # the fingerprint must not be mixed into the same URL.
+            if "appId=" in href:
+                self.assertNotIn("fingerprint", href)
+
+    def test_all_clients_are_listed_with_the_fingerprint_url(self):
+        document = _render()
+        text = _text_of(document)
+        for client in ("F-Droid client", "Obtainium", "Neo Store / Droid-ify"):
+            self.assertIn(client, text)
+        with_fingerprint = f"{REPO_URL}?fingerprint={FINGERPRINT}"
+        self.assertGreaterEqual(_hrefs(document).count(with_fingerprint), 2)
+
+
+def text_before_latest(document: str) -> str:
+    """The part of the page above the "Latest version" heading."""
+    marker = "<h2>Latest version</h2>"
+    return document[: document.index(marker)] if marker in document else document
+
+
 class MissingDataTests(unittest.TestCase):
     def test_renders_without_any_release(self):
         # A first run that has not found an APK yet must still produce a page.

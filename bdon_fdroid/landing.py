@@ -182,7 +182,7 @@ def render(
         parts.append('<div class="card"><dl>')
         rows = [
             ("Version", f"{latest.version_name} (versionCode {latest.version_code})"),
-            ("Package", latest.file_name.rsplit(".apk", 1)[0]),
+            ("Package", config.package_name),
             ("Size", _human(latest.size)),
             ("SHA-256", latest.sha256),
             ("First seen", _when(latest.added)),
@@ -274,6 +274,39 @@ def render(
                 f'<li><a href="{_esc(site.og_image)}">Official site artwork</a></li>'
             )
         parts.append("</ul>")
+
+    # --- other clients ---------------------------------------------------
+    # Obtainium cannot search a third-party F-Droid repository, so the package
+    # name has to be typed in by hand. Its URL handling keeps an `appId` query
+    # parameter and uses it to pre-fill the field, so a link that carries it
+    # saves the reader looking the name up.
+    obtainium = f"{repo_url}?appId={config.package_name}"
+    parts.append("<h2>Other clients</h2>")
+    parts.append('<ul class="files">')
+    for description, href, label in (
+        ("F-Droid client", with_fingerprint, "add the repository"),
+        (
+            "Obtainium",
+            obtainium,
+            f"?appId={config.package_name}",
+        ),
+        ("Neo Store / Droid-ify", with_fingerprint, "add as an F-Droid repo"),
+    ):
+        parts.append(
+            f'<li><span class="desc">{_esc(description)}</span>'
+            f'<a href="{_esc(href)}"><span class="mono">{_esc(label)}</span></a></li>'
+        )
+    parts.append(
+        f'<li><span class="desc">Package name</span>'
+        f'<span class="mono">{_esc(config.package_name)}</span></li>'
+    )
+    parts.append("</ul>")
+    parts.append(
+        '<p class="note" style="margin-top:.75rem">Obtainium cannot list the apps in '
+        "a third-party F-Droid repository, so it needs the package name; the link above "
+        "carries it. Neo Store and Droid-ify need <em>Mirror rotation</em> enabled, and "
+        "must use the same address - they cannot fall back to a mirror on a 404.</p>"
+    )
 
     # --- footer ----------------------------------------------------------
     parts.append(

@@ -173,6 +173,8 @@ it is unset, rather than skipping the check. A silently-unchecked redirector is
 how a broken downloader survives for weeks - the official client keeps working
 through the mirror, so only a Neo Store or Obtainium user notices.
 
+See [5.5](#55-using-a-custom-domain) for pointing all three at a custom domain.
+
 Then re-run **Update repository**, and set Pages to deploy from the `gh-pages`
 branch as in the next section.
 
@@ -191,6 +193,32 @@ Note that `--var` *replaces* the configured value rather than merging with it, s
 > Without a working redirector everything still works in the official F-Droid
 > client, which falls through to the CDN mirror when Pages returns 404. Neo Store
 > and Obtainium will report the download as failed.
+
+## 5.5 Using a custom domain
+
+The repository lives at whatever `REPO_URL` says, so a custom domain needs two
+variables set and nothing else:
+
+| Variable | Value |
+| --- | --- |
+| `PAGES_ORIGIN` | `https://froid.example.com` |
+| `REPO_URL` | `https://froid.example.com/fdroid/repo` |
+| `REDIRECTOR_URL` | `https://froid.example.com` |
+
+`PAGES_ORIGIN` is the one that cannot be derived: it is where the Worker proxies
+from, and a custom domain is not derivable from the repository owner. If the
+domain is served by the Worker itself, the first and third rows are the same
+value, which is the usual setup - attach the domain to the Worker with
+`wrangler` and every request goes through it.
+
+`REPO_URL` must end in `/fdroid/repo`, because several F-Droid client features
+assume that shape.
+
+> **Self-hosting on another platform?** The repository files are plain static
+> files; `deploy/` is the whole site. Serve them from any static host, then set
+> `PAGES_ORIGIN` to that host and `REPO_URL` to the repository address on it. The
+> redirector is only needed for the clients that cannot follow a mirror - with a
+> host that can return a 302 in front of the APK, the CDN mirror alone is enough.
 
 ## 6. Enable GitHub Pages
 
