@@ -48,8 +48,8 @@ jobs:
           node-version: '22'
 
       - name: Run the Worker tests
-      # Never deploy code that does not pass its own tests.
-      - run: node --test worker/
+        # Never deploy code that does not pass its own tests.
+        run: node --test worker/
 
       - name: Work out the Pages origin
         id: origin

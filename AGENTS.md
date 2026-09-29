@@ -25,7 +25,7 @@ python3 -m bdon_fdroid build      # fetch if new, then write + sign ./deploy
 python3 -m bdon_fdroid serve      # serve the output like a client would
 python3 -m bdon_fdroid verify --repo-url <url> --fingerprint <hex>
 
-python3 -m unittest discover -s tests        # 179 tests, stdlib only
+python3 -m unittest discover -s tests        # 195 tests, stdlib only
 (cd worker && node --test)                   # 18 tests
 ```
 
@@ -107,6 +107,41 @@ A repository *variable* reaches Actions only as `${{ vars.REPO_URL }}`. A bare
 the GitHub Pages address as the primary link, a URL only the official client can
 install from, and the run went green. `update.yml` now fails loudly if
 `REDIRECTOR_URL` is set without `REPO_URL`.
+
+A repository variable must be read through `vars.NAME` and bridged into a step's
+`env:` before the shell touches it. Reading a *bridged* name normally is correct
+and is the documented idiom - what is never correct is a shell read of a name
+nothing bridged, because the expansion is silently empty.
+
+### A workflow file that is invalid schema still parses as YAML
+
+`yaml.safe_load` accepts it, nothing local complains, and the file reads fine.
+GitHub only rejects it when it validates the workflow, which shows up as a failed
+run and an email - not as a red build of whatever you were working on. So
+`redirector.yml` sat broken while the Worker it deploys kept working perfectly,
+because the Worker had already been deployed by hand and only changes when
+`worker/` does.
+
+The cause was a comment dedented to the step level:
+
+```yaml
+      - name: Run the Worker tests
+      # Never deploy code that does not pass its own tests.   <-- same indent
+      - run: node --test worker/
+```
+
+The comment reads as though it introduces the next step, so the step above keeps
+its `name:` and loses its `run:`. GitHub's error is "There's not enough info to
+determine what you meant", reported at the comment, far from the mistake.
+
+**A comment introducing a step belongs above the `- `, not beside it.** Note that a
+comment at the item level is *not* wrong on its own - one introducing the next
+step is normal. It is only ambiguous when it leaves the step above it without a
+`run:` or `uses:`.
+
+`tests/test_workflows.py` checks this and the other structural rules. It is
+line-based rather than using a YAML parser, because the daily job may not gain a
+dependency.
 
 ### `repo.address` is expensive; the fingerprint is not
 
@@ -215,6 +250,11 @@ file.
 
 `tests/test_repo_json.py` covers the shipped configuration, which for a long time
 had **no** test coverage at all.
+
+`tests/test_workflows.py` checks the workflow files structurally. It exists
+because an invalid workflow file is not a failing build - it is a file that
+parses as YAML, reads correctly, and is rejected by GitHub somewhere else
+entirely.
 
 ## Layout
 
