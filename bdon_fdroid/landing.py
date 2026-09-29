@@ -169,10 +169,6 @@ def render(
         )
         parts.append("</dl>")
         parts.append(_copy_row("fingerprint", "compare with what F-Droid shows"))
-        parts.append(
-            '<p class="note" style="margin-top:.9rem">Keep the key file safe. '
-            "If it is lost, users must remove and re-add the repository.</p>"
-        )
         parts.append("</div>")
     else:
         parts.append(
@@ -288,28 +284,21 @@ def render(
     parts.append("<h2>Other clients</h2>")
     parts.append('<ul class="files">')
     for description, href, label in (
-        ("F-Droid client", with_fingerprint, "add the repository"),
         (
             "Obtainium",
             obtainium,
             f"?appId={config.package_name}",
         ),
-        ("Neo Store / Droid-ify", with_fingerprint, "add as an F-Droid repo"),
     ):
         parts.append(
             f'<li><span class="desc">{_esc(description)}</span>'
             f'<a href="{_esc(href)}"><span class="mono">{_esc(label)}</span></a></li>'
         )
-    parts.append(
-        f'<li><span class="desc">Package name</span>'
-        f'<span class="mono">{_esc(config.package_name)}</span></li>'
-    )
     parts.append("</ul>")
     parts.append(
         '<p class="note" style="margin-top:.75rem">Obtainium cannot list the apps in '
         "a third-party F-Droid repository, so it needs the package name; the link above "
-        "carries it. Neo Store and Droid-ify need <em>Mirror rotation</em> enabled, and "
-        "must use the same address - they cannot fall back to a mirror on a 404.</p>"
+        "carries it.</p>"
     )
 
     # --- footer ----------------------------------------------------------

@@ -197,10 +197,10 @@ class PackageNameTests(unittest.TestCase):
     def test_all_clients_are_listed_with_the_fingerprint_url(self):
         document = _render()
         text = _text_of(document)
-        for client in ("F-Droid client", "Obtainium", "Neo Store / Droid-ify"):
+        for client in ("Obtainium"):
             self.assertIn(client, text)
         with_fingerprint = f"{REPO_URL}?fingerprint={FINGERPRINT}"
-        self.assertGreaterEqual(_hrefs(document).count(with_fingerprint), 2)
+        self.assertGreaterEqual(_hrefs(document).count(with_fingerprint), 1)
 
 
 def text_before_latest(document: str) -> str:
