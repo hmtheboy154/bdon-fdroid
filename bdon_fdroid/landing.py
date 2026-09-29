@@ -183,6 +183,7 @@ def render(
         rows = [
             ("Version", f"{latest.version_name} (versionCode {latest.version_code})"),
             ("Package", config.package_name),
+            ("Filename", latest.file_name),
             ("Size", _human(latest.size)),
             ("SHA-256", latest.sha256),
             ("First seen", _when(latest.added)),
