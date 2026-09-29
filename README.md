@@ -282,6 +282,5 @@ stale metadata.
 
 ## License
 
-MIT for this tool. BanG Dream! is a trademark of Craft Egg Inc. and
-Bandai Namco Entertainment; the game is redistributed by its publisher, not by
+MIT for this tool. [BanG Dream!](https://bang-dream.com/) is a trademark of [Bushiroad](https://bushiroad.co.jp/); the game is redistributed by its publisher, not by
 this project.
