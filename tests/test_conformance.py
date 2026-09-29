@@ -25,9 +25,11 @@ import socket
 import subprocess
 import sys
 import tempfile
+import pathlib
 import threading
 import unittest
 
+from bdon_fdroid import config as config_module
 from bdon_fdroid import indexgen, signing
 from bdon_fdroid.apk import Release
 from bdon_fdroid.config import Config
@@ -35,6 +37,7 @@ from bdon_fdroid.config import Config
 KEYSTORE_PASSWORD = "conformance-test-password"
 MIRROR = "https://l12-pkg-download.biligames.com/sirius/apk/"
 PACKAGE = Config().package_name
+REPO_JSON = pathlib.Path(__file__).resolve().parent.parent / "repo.json"
 
 
 def _fdroidserver_available() -> bool:
@@ -43,6 +46,23 @@ def _fdroidserver_available() -> bool:
     except ImportError:
         return False
     return True
+
+
+def _release(version_code: int = 10001, version_name: str = "1.0.1") -> Release:
+    """A stand-in for a real download. No APK is fetched by these tests."""
+    return Release(
+        url=MIRROR + "BanGDreamOurNotes_1.0.1_2026_09_17_22_42_02.apk",
+        file_name="BanGDreamOurNotes_1.0.1_2026_09_17_22_42_02.apk",
+        size=446890829,
+        sha256="d" * 64,
+        version_code=version_code,
+        version_name=version_name,
+        added=1789000000000,
+        mirror_base=MIRROR,
+        signer="a" * 64,
+        min_sdk_version=26,
+        target_sdk_version=36,
+    )
 
 
 @unittest.skipUnless(_fdroidserver_available(), "fdroidserver is not installed")
@@ -219,6 +239,126 @@ class RepositoryConformanceTests(unittest.TestCase):
         with urlopen(url) as response:  # noqa: S310 - a local test server
             body = response.read()
         self.assertEqual(len(body), icon["size"])
+
+
+@unittest.skipUnless(_fdroidserver_available(), "fdroidserver is not installed")
+@unittest.skipUnless(shutil.which("jarsigner"), "a JDK is required")
+class ShippedConfigConformanceTests(unittest.TestCase):
+    """Verify the repository that ``repo.json`` actually describes.
+
+    The other class builds from the dataclass defaults, so it never sees the
+    file that is really published. The description is 2730 characters of HTML
+    and the category is a string no schema enforces, which is exactly the kind
+    of thing that parses fine in a unit test and reaches a user broken. Only
+    the address is overridden, because it has to be the local test server.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = tempfile.mkdtemp(prefix="bdon-fdroid-shipped-")
+        cls.repo_root = os.path.join(cls.dir, "fdroid", "repo")
+        os.makedirs(cls.repo_root, exist_ok=True)
+        cls.keystore_path = os.path.join(cls.dir, "keystore.p12")
+        result = subprocess.run(
+            [
+                "keytool", "-genkeypair", "-noprompt",
+                "-alias", "shipped", "-keyalg", "RSA", "-keysize", "2048",
+                "-validity", "2", "-dname", "CN=shipped, O=Tests, C=US",
+                "-keystore", cls.keystore_path, "-storetype", "PKCS12",
+                "-storepass", KEYSTORE_PASSWORD, "-keypass", KEYSTORE_PASSWORD,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            shutil.rmtree(cls.dir, ignore_errors=True)
+            raise unittest.SkipTest(f"could not create a keystore: {result.stderr.strip()}")
+
+        cls.keystore = signing.KeyStore(cls.keystore_path, "shipped", KEYSTORE_PASSWORD)
+        cls.fingerprint = cls.keystore.fingerprint()
+
+        cls.server = _Server(cls.dir)
+        config = config_module.load(str(REPO_JSON))
+        config.repo.address = f"http://127.0.0.1:{cls.server.port}/fdroid/repo"
+        config.validate()
+        cls.config = config
+
+        assets = indexgen.Assets(
+            repo_icon=indexgen.Asset("icon.jpg", data=b"fake-jpeg"),
+            app_icon=indexgen.Asset("icons/com.bilibili.sirius.official.jpg", data=b"fake-jpeg"),
+        )
+        summary = indexgen.write_repository(cls.repo_root, config, [_release()], assets)
+        signing.sign_index_files(cls.repo_root, summary["files"], cls.keystore)
+
+    @classmethod
+    def tearDownClass(cls):
+        if getattr(cls, "server", None):
+            cls.server.stop()
+        shutil.rmtree(cls.dir, ignore_errors=True)
+
+    def _configure_fdroidserver(self):
+        from fdroidserver import common
+
+        common.config = {
+            "jarsigner": shutil.which("jarsigner"),
+            "keytool": shutil.which("keytool"),
+            "apksigner": None,
+        }
+        return common
+
+    def _url(self) -> str:
+        return f"{self.config.repo.address}?fingerprint={self.fingerprint.upper()}"
+
+    def test_shipped_repository_downloads_and_verifies(self):
+        from fdroidserver import index
+
+        self._configure_fdroidserver()
+        document, _ = index.download_repo_index_v2(
+            self._url(), verify_fingerprint=self.fingerprint
+        )
+        self.assertIn(PACKAGE, document["packages"])
+        result = index.download_repo_index_v1(
+            self._url(), verify_fingerprint=self.fingerprint
+        )
+        v1 = result[0] if isinstance(result, tuple) else result
+        self.assertIn(PACKAGE, v1["packages"])
+
+    def test_shipped_description_survives_the_round_trip(self):
+        from fdroidserver import index
+
+        self._configure_fdroidserver()
+        document, _ = index.download_repo_index_v2(
+            self._url(), verify_fingerprint=self.fingerprint
+        )
+        served = document["packages"][PACKAGE]["metadata"]["description"]["en-US"]
+        self.assertEqual(served, self.config.app.description)
+        # The clients parse this, so it has to still be HTML after the round
+        # trip and not have been escaped into visible angle brackets.
+        self.assertIn("<p>", served)
+        self.assertNotIn("&lt;p&gt;", served)
+
+    def test_shipped_metadata_reaches_both_index_formats(self):
+        from fdroidserver import index
+
+        self._configure_fdroidserver()
+        v2, _ = index.download_repo_index_v2(
+            self._url(), verify_fingerprint=self.fingerprint
+        )
+        result = index.download_repo_index_v1(
+            self._url(), verify_fingerprint=self.fingerprint
+        )
+        v1 = result[0] if isinstance(result, tuple) else result
+        # v2 puts app metadata under packages[...]["metadata"]; v1 keeps it in a
+        # separate "apps" list, which is why a field fixed in one format and
+        # forgotten in the other goes unnoticed.
+        meta = v2["packages"][PACKAGE]["metadata"]
+        app = next(a for a in v1["apps"] if a["packageName"] == PACKAGE)
+        for value in (meta["authorName"], app["authorName"]):
+            self.assertEqual(value, "FROMTOKYO / published by BILIBILI HK LIMITED")
+        for value in (meta["categories"], app["categories"]):
+            self.assertEqual(value, ["Party Game"])
+        self.assertIn("Unofficial", v2["repo"]["name"]["en-US"])
+        self.assertIn("Unofficial", v1["repo"]["name"])
 
 
 class _Server:

@@ -1,8 +1,9 @@
 # bdon-fdroid
 
-A static [F-Droid](https://f-droid.org) repository for **BanG Dream! Our Notes**,
-built automatically from the publisher's own website and published on GitHub
-Pages.
+An unofficial, automatically-updated [F-Droid](https://f-droid.org) index for
+**BanG Dream! Our Notes**, built from the publisher's own website and published on
+GitHub Pages. The APKs are BILIBILI HK's own builds, downloaded from bilibili's
+CDN; nothing here is built or re-signed.
 
 The publisher does not offer an API for its downloads. The "Download for Android"
 button on [bdon.biligames.com](https://bdon.biligames.com/) simply calls
@@ -278,8 +279,30 @@ stale metadata.
   `rel=icon` is a 16px favicon, so the real icon is found in the JS bundles.
 - Only Android builds are indexed. The publisher also ships the game on Google
   Play and the App Store; both are linked from the published page.
+- The app description is **HTML**, because both F-Droid clients parse it as such
+  (`AnnotatedString.fromHtml` in the current one, `HtmlCompat.fromHtml` in the
+  legacy one) and an HTML parser collapses plain newlines into spaces. The
+  publisher's copy is therefore stored as `<p>`/`<br>`/`<b>`; pasting it as plain
+  text renders as one wall of text. Obtainium ignores the field entirely. It is
+  written down in `repo.json` only, since it is long enough that a second copy in
+  `config.py` would only let the two drift.
+- The category is `Party Game`, not `Games`. **There is no F-Droid category
+  called "Games"** - in the current client that is the *name of a group* holding
+  17 genres, so a category with that literal name falls through to the client's
+  `else -> CategoryGroups.misc` branch and the app shows up under Misc.
+  `Party Game` is the one genre that fits (the publisher's own copy calls the
+  gameplay party-style, with up to five players) and is a real category in the
+  f-droid.org index. The legacy clients that Neo Store and Droid-ify fork show
+  categories as a flat list, where `Party Game` appears without an icon - the
+  client falls back to the raw name, so it degrades rather than breaking.
+- `Config.validate()` enforces F-Droid's own `char_limits` (summary 80,
+  description 4000, author 256), so an over-long field fails the build instead of
+  being silently truncated by a client. Tags count against the description limit.
 
 ## License
 
-MIT for this tool. [BanG Dream!](https://bang-dream.com/) is a trademark of [Bushiroad](https://bushiroad.co.jp/); the game is redistributed by its publisher, not by
-this project.
+MIT for this tool. [BanG Dream!](https://bang-dream.com/) is a trademark of
+[Bushiroad](https://bushiroad.co.jp/); the game was made by
+[FROMTOKYO](https://fromtokyo.co.jp/) and this Android build is published by
+BILIBILI HK LIMITED. The game is redistributed by its publisher, not by this
+project.

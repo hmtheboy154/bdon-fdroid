@@ -11,8 +11,14 @@
       "redirector's address instead - see docs/setup-github-actions-and-pages.md."
     ],
     "address": "",
-    "name": "BanG Dream! Our Notes",
-    "description": "Official Android builds of BanG Dream! Our Notes, indexed straight from the publisher's website. The APKs are downloaded from the official bilibili CDN, not from this site.",
+    "_commentName": [
+      "An unofficial third-party index, and it says so in the name on purpose.",
+      "The APKs are signed by BILIBILI HK; nothing here is built or re-signed.",
+      "The disclaimer below is the other half of that, and app.description is",
+      "left as the publisher's own copy - do not append ours to it."
+    ],
+    "name": "Unofficial BanG Dream! Our Notes index",
+    "description": "Unofficial index of the official Android builds that BILIBILI HK publishes on the BanG Dream! Our Notes website. The APKs are downloaded from the publisher's own CDN, not from this site. Not affiliated with or endorsed by Bushiroad, FROMTOKYO or BILIBILI.",
     "icon": "icon.jpg",
     "mirrorCountryCode": "CN",
     "maxAge": 0
@@ -21,11 +27,24 @@
   "app": {
     "name": "BanG Dream! Our Notes",
     "summary": "GEKISO Gameplay x Adventure rhythm game",
-    "description": "BanG Dream! Our Notes is a rhythm adventure game from Craft Egg and bilibili, featuring the bands MyGO!!!!! and Ave Mujica. This repository indexes the official English, Taiwanese, Hong Kong and Southeast Asian builds distributed on the publisher's own website; the APKs themselves are downloaded directly from bilibili's servers.",
+    "_commentDescription": [
+      "Both the current and the legacy F-Droid clients parse this field as HTML",
+      "(AnnotatedString.fromHtml and HtmlCompat.fromHtml), which collapses plain",
+      "newlines into spaces. Paste the publisher's copy as <p>/<br>/<b> or it",
+      "renders as one wall of text. Limit is 4000 chars, tags included."
+    ],
+    "description": "<p>Presenting BanG Dream! Our Notes, a brand-new rhythm game adventure from BanG Dream! Project!</p><p>Enjoy a wide variety of songs from five bands and discover a rich new story waiting to unfold.</p><p><b>◆New Rhythm Game System: “GEKISO LIVE”◆</b><br>Special GEKISO sections will now appear during rhythm gameplay!<br>Combos, timing precision, and even luck—put your rhythm game skills to the ultimate challenge in an exciting new gameplay experience!<br>Feel the excitement and immersion of a real BanG Dream! live performance and enjoy the party-style rhythm gameplay with up to five players!</p><p>Our Notes also features an exclusive new system: Assist Mode!<br>Whether you're new to rhythm games or just looking for a more relaxed experience, Assist Mode lets everyone enjoy the performance and improve at their own pace.</p><p><b>◆From Original Songs to the Latest Hit Covers◆</b><br>From iconic original songs featured in the BanG Dream! anime—including tracks by MyGO!!!!! and Ave Mujica—to a wide range of popular cover songs, the lineup is packed with music to enjoy!<br>Play your favorite songs, from the latest hits to beloved classics.<br>You can also watch a variety of performance scenes and music videos from the BanG Dream! anime series.<br>Plus, the latest tracks from fan-favorite bands MyGO!!!!! and Ave Mujica will be available first in Our Notes!</p><p><b>【BanG Dream! Songs】</b><br>・Mayoiuta / MyGO!!!!!<br>・KiLLKiSS / Ave Mujica<br>・Haruhikage (MyGO!!!!! ver.) / MyGO!!!!!<br>・MUGEN MY WORLD / Mugendai MewType<br>・Kishi Kaisen / millsage<br>・Homie’s Tie!! / Ikka Dumb Rock!<br>...and many more</p><p>More cover songs will be coming up soon!</p><p><b>◆New Stories Woven by Five Bands◆</b><br>Alongside MyGO!!!!!, Ave Mujica, and Mugendai MewType, millsage and Ikka Dumb Rock! also join the stage!<br>With the Cinematic Story System, characters move vividly with rich expressions, just like in a movie or anime.<br>Special scenes also feature animated sequences, including all-new cuts.<br>A wide range of visual effects and illustrated scenes come together to deliver a spectacularly renewed story experience.</p><p>Relive the familiar anime stories of MyGO!!!!!, Ave Mujica, and Mugendai MewType from the game-exclusive perspective. You can also enjoy special episodes that continue the anime stories, available exclusively in Our Notes. Meanwhile, millsage and Ikka Dumb Rock! will unfold completely original stories from the very beginning.</p><p>Experience vibrant stories woven by five distinctive bands and a total of 25 unique members.</p><p><b>◆Official Website◆</b><br>https://bdon.biligames.com/?lang=en-us</p><p>©BanG Dream! Project ©FROMTOKYO ©Bushiroad. Published by BILIBILI HK LIMITED</p>",
     "license": "Proprietary",
-    "categories": ["Multimedia"],
+    "_commentCategories": [
+      "There is no category named 'Games'. In the current client 'Games' is a",
+      "*group* of 17 genres, so a category literally called 'Games' falls through",
+      "to the Misc group. 'Party Game' is the one genre that fits - the publisher's",
+      "own copy calls the gameplay party-style, with up to five players - and it is",
+      "a real category in the f-droid.org index."
+    ],
+    "categories": ["Party Game"],
     "website": "https://bdon.biligames.com/",
-    "authorName": "Craft Egg Inc. / bilibili",
+    "authorName": "FROMTOKYO / published by BILIBILI HK LIMITED",
     "issueTracker": "",
     "sourceCode": "",
     "translation": ""

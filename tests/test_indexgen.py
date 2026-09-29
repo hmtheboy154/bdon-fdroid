@@ -95,6 +95,26 @@ class IndexV2Tests(_ConfigFixture):
         document = indexgen.build_index_v2(self.config, [_release()], indexgen.Assets())
         self.assertEqual(document["repo"]["address"], REPO_URL)
 
+    def test_app_metadata_reaches_the_index(self):
+        document = indexgen.build_index_v2(self.config, [_release()], indexgen.Assets())
+        meta = document["packages"][PACKAGE]["metadata"]
+        # v2 localises the display strings but leaves authorName, categories
+        # and license as plain scalars.
+        self.assertEqual(meta["name"]["en-US"], "BanG Dream! Our Notes")
+        self.assertEqual(meta["summary"]["en-US"], "GEKISO Gameplay x Adventure rhythm game")
+        self.assertEqual(meta["authorName"], "FROMTOKYO / published by BILIBILI HK LIMITED")
+        self.assertEqual(meta["categories"], ["Party Game"])
+        self.assertEqual(meta["license"], "Proprietary")
+
+    def test_repo_name_reaches_the_index(self):
+        # The name is what a user reads in their repository list, so it has to
+        # survive into v2 and not just sit in repo.json.
+        document = indexgen.build_index_v2(self.config, [_release()], indexgen.Assets())
+        name = document["repo"]["name"]["en-US"]
+        self.assertEqual(name, "Unofficial BanG Dream! Our Notes index")
+        self.assertIn("Unofficial", name)
+        self.assertIn("Unofficial", document["repo"]["description"]["en-US"])
+
     def test_unknown_sdk_is_omitted_rather_than_guessed(self):
         # usesSdk is optional in the schema, and inventing an API level would be
         # worse than saying nothing.
@@ -164,6 +184,26 @@ class IndexV1Tests(_ConfigFixture):
         # ...but they are referenced from `localized`, which is how v1 locates them.
         localized = document["apps"][0]["localized"]["en-US"]
         self.assertEqual(localized["phoneScreenshots"], ["1.jpg"])
+
+    def test_v1_agrees_with_v2_about_author_and_categories(self):
+        # v1 and v2 build their metadata from separate code paths, so a field
+        # fixed in one is easy to forget in the other. Neo Store and Droid-ify
+        # read v1, so a stale v1 is not harmless.
+        v1 = indexgen.build_index_v1(self.config, [_release()], indexgen.Assets())
+        v2 = indexgen.build_index_v2(self.config, [_release()], indexgen.Assets())
+        app = v1["apps"][0]
+        meta = v2["packages"][PACKAGE]["metadata"]
+        self.assertEqual(app["authorName"], meta["authorName"])
+        self.assertEqual(app["categories"], meta["categories"])
+        self.assertEqual(app["authorName"], "FROMTOKYO / published by BILIBILI HK LIMITED")
+        self.assertEqual(app["categories"], ["Party Game"])
+
+    def test_v1_repo_block_is_unofficial_too(self):
+        document = indexgen.build_index_v1(self.config, [_release()], indexgen.Assets())
+        self.assertEqual(
+            document["repo"]["name"], "Unofficial BanG Dream! Our Notes index"
+        )
+        self.assertIn("Unofficial", document["repo"]["description"])
 
 
 class EntryTests(unittest.TestCase):

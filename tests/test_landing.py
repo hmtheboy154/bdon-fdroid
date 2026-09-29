@@ -209,6 +209,42 @@ def text_before_latest(document: str) -> str:
     return document[: document.index(marker)] if marker in document else document
 
 
+class UnofficialCopyTests(unittest.TestCase):
+    """The page has to say what it is, before anyone trusts it.
+
+    Nothing here is built or re-signed by us - the APK served from the mirror is
+    BILIBILI HK's own build, downloaded from its CDN - so "unofficial" is the
+    accurate description, and the disclaimer has to name the parties who own the
+    game rather than only the tool that made the page.
+    """
+
+    def test_tagline_calls_the_page_an_unofficial_index(self):
+        text = _text_of(_render())
+        self.assertIn("unofficial", text.lower())
+        self.assertIn("index", text.lower())
+
+    def test_title_uses_the_configured_repo_name(self):
+        document = _render()
+        self.assertIn("<title>Unofficial BanG Dream! Our Notes index", document)
+
+    def test_heading_is_the_games_real_name_not_the_repos(self):
+        # The h1 answers "what is this page about"; the tagline carries the
+        # unofficial claim. Putting the repo name in the h1 would bury that.
+        text = _text_of(_render())
+        self.assertTrue(text.lstrip().startswith("BanG Dream! Our Notes"))
+        self.assertNotIn("Unofficial BanG Dream! Our Notes index", text)
+
+    def test_disclaimer_names_the_right_parties(self):
+        text = _text_of(_render())
+        for party in ("Bushiroad", "FROMTOKYO", "BILIBILI"):
+            self.assertIn(party, text)
+        self.assertIn("F-Droid project", text)
+
+    def test_nobody_who_did_not_make_the_game_is_named(self):
+        text = _text_of(_render())
+        self.assertNotIn("Craft Egg", text)
+
+
 class MissingDataTests(unittest.TestCase):
     def test_renders_without_any_release(self):
         # A first run that has not found an APK yet must still produce a page.

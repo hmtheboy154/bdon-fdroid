@@ -19,6 +19,16 @@ from . import PACKAGE_NAME, SITE_URL
 
 DEFAULT_CONFIG = "repo.json"
 
+#: F-Droid's own field limits, copied from ``char_limits`` in fdroidserver's
+#: ``config.yml``.  fdroidserver's ``check_char_limits`` rejects anything longer
+#: and the clients truncate silently, so an over-long description would reach
+#: users quietly mangled unless it is caught here first.  The description is
+#: HTML, so its tags count against the limit too.
+#:
+#: Keys are the attribute names on :class:`AppSettings`, not F-Droid's field
+#: names - the one difference is ``authorName``, which is ``author_name`` here.
+CHAR_LIMITS = {"summary": 80, "description": 4000, "author_name": 256}
+
 
 class ConfigError(RuntimeError):
     """Raised when the configuration is missing or inconsistent."""
@@ -26,11 +36,12 @@ class ConfigError(RuntimeError):
 
 @dataclass
 class RepoSettings:
-    name: str = "BanG Dream! Our Notes"
+    name: str = "Unofficial BanG Dream! Our Notes index"
     description: str = (
-        "Official Android builds of BanG Dream! Our Notes, indexed straight from "
-        "the publisher's website. The APKs are downloaded from the official "
-        "bilibili CDN, not from this site."
+        "Unofficial index of the official Android builds that BILIBILI HK "
+        "publishes on the BanG Dream! Our Notes website. The APKs are "
+        "downloaded from the publisher's own CDN, not from this site. Not "
+        "affiliated with or endorsed by Bushiroad, FROMTOKYO or BILIBILI."
     )
     #: Full URL users add to F-Droid.  Must end in ``/fdroid/repo``.
     address: str = ""
@@ -43,11 +54,17 @@ class RepoSettings:
 class AppSettings:
     name: str = "BanG Dream! Our Notes"
     summary: str = "GEKISO Gameplay x Adventure rhythm game"
+    #: The publisher's own copy, as HTML.  Deliberately empty here: it is long
+    #: enough that keeping a second copy in code would only let the two drift.
+    #: ``repo.json`` is the single place it is written down.
     description: str = ""
     license: str = "Proprietary"
-    categories: list[str] = field(default_factory=lambda: ["Multimedia"])
+    #: ``Party Game`` rather than ``Multimedia``: there is no category called
+    #: ``Games``.  In the current client that is a *group* of 17 genres, so the
+    #: literal name would land in Misc.  See ``repo.json`` for the full note.
+    categories: list[str] = field(default_factory=lambda: ["Party Game"])
     website: str = SITE_URL
-    author_name: str = "Craft Egg Inc. / bilibili"
+    author_name: str = "FROMTOKYO / published by BILIBILI HK LIMITED"
     issue_tracker: str = ""
     source_code: str = ""
     translation: str = ""
@@ -92,6 +109,15 @@ class Config:
         """
         if not self.app.summary:
             raise ConfigError("app.summary must not be empty")
+        for name, limit in CHAR_LIMITS.items():
+            value = getattr(self.app, name)
+            if len(value) > limit:
+                raise ConfigError(
+                    f"app.{name} is {len(value)} characters, over F-Droid's "
+                    f"{limit} limit (see CHAR_LIMITS). Shorten it in "
+                    f"{DEFAULT_CONFIG}; a client would otherwise truncate it "
+                    "without telling anyone."
+                )
         return self
 
     def require_repo_address(self) -> "Config":
