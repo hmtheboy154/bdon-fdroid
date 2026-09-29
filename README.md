@@ -18,47 +18,43 @@ So tracking new releases means reading those bundles. This project does that,
 and publishes the result as a real F-Droid repository so the app updates itself
 from inside the F-Droid client like any other app.
 
-### The app is not restricted, and the index must not say it is
+Two things shape the design, both covered below:
 
-F-Droid treats every entry in an app's `features` list as **mandatory**, and
-`fdroidserver` only records a `uses-feature` that has an `android:name` *and* is
-required. This project's manifest has no required features at all:
+- **The 450 MB APK is never stored here.** The index points at the publisher's
+  own CDN, which is registered with F-Droid as a mirror - and, because only the
+  official client understands mirrors, behind a small redirecting Worker.
+  See [The APK is never stored here](#the-apk-is-never-stored-here).
+- **The publisher publishes no API and no version metadata**, so `versionCode`
+  can only be read out of the APK itself. Every new release is downloaded once,
+  read, and discarded. See [How a run works](#how-a-run-works).
 
-```xml
-<uses-feature android:glEsVersion="0x30000"/>              <!-- no name -->
-<uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
-```
+## How a run works
 
-So the published index carries **no** feature list. An earlier version synthesised
-`glEsVersion196608` and listed every optional feature, and F-Droid then reported
-the app as incompatible with phones that ran it perfectly well from Google Play.
-`tests/test_features.py` pins the rule, and `releases.json` records which version
-of it produced each cached entry, so a change to the rules cannot be masked by
-stale metadata.
-
-### One wrinkle worth knowing about
-
-The APK the website serves is **`com.bilibili.sirius.official`**. The Google Play
-listing linked from the same page is a different application, `com.bilibili.sirius`.
-
-That is not a typo. F-Droid keys everything on the package name, and the
-publisher's own client would refuse to update across two application ids, so the
-repository indexes the build the site actually distributes - the one an EN/TW/HK
-and Southeast Asian player gets. `versionCode` also is not derivable from the
-URL: the current release is `1.0.1` at `versionCode 25`, which is why the APK
-has to be read at least once per new release.
-
-The build refuses to publish if the scraped link ever resolves to a different
-application than the one configured in `repo.json`.
+1. **Scrape** `https://bdon.biligames.com/`, collect every `<script src>`, and
+   download the bundles. Nothing is hardcoded: the bundle filenames contain
+   content hashes and change on every deploy.
+2. **Find** the single `.apk` URL in them. More than one is an error, not a
+   guess.
+3. **Compare** it against `releases.json`, the committed cache of everything
+   seen before, using the URL plus the CDN's `Content-Length`, `ETag` and
+   `Last-Modified`. **This is the step that keeps the daily job cheap** - an
+   unchanged check is a few HTTP requests, not a 450 MB download.
+4. **Download** the APK only when something actually changed. While it streams
+   past, the SHA-256 is computed; then the manifest and signing certificate are
+   read, and the file is deleted. Nothing is kept.
+5. **Publish** `index-v1.json`, `index-v2.json` and `entry.json` into signed
+   JARs, plus a landing page, onto the `gh-pages` branch.
 
 ## The APK is never stored here
 
-The game is about 450 MB, so this repository does not host it. Instead the
-generated index points at bilibili's own CDN, and the *hash* of the file is
-recorded so the F-Droid client can still verify what it downloads.
+The game is about 450 MB, so this repository does not host it. The generated
+index points at bilibili's own CDN, and the *hash* of the file is recorded so the
+F-Droid client can still verify what it downloads.
 
-Getting that to work took one non-obvious step. F-Droid resolves an APK's
-`apkName` by appending it to a **mirror address** - in `fdroidclient`:
+Getting that to work took two non-obvious steps.
+
+**A mirror, because F-Droid cannot follow an absolute URL.** F-Droid resolves an
+APK's `apkName` by appending it to a **mirror address** - in `fdroidclient`:
 
 ```kotlin
 // MirrorChooser.mirrorRequest -> Mirror.getUrl
@@ -77,16 +73,13 @@ named with the CDN's own filename:
 
 `<mirror>/<name>` is then byte-for-byte the upstream URL, and F-Droid downloads
 the game straight from the publisher. Paths the CDN does not have answer `403`,
-so the client transparently falls back to the Pages-hosted repository for the
-index, icon and screenshots.
+so the client falls back to the Pages-hosted repository for the index, icon and
+screenshots. If the publisher ever renames the CDN host, the next scheduled run
+notices and republishes with the new mirror - no code change.
 
-If the publisher ever renames the CDN host, the next scheduled run notices and
-republishes with the new mirror - no code change.
-
-### The mirror is not enough
-
-It works in the official F-Droid client, and in *nothing else*. The failure only
-shows up when you try a second client:
+**A redirector, because only the official client honours mirrors.** The mirror
+mechanism is necessary but not sufficient, and the gap is invisible until you try
+a second client:
 
 | Client | On a 404 | Result |
 | --- | --- | --- |
@@ -96,7 +89,7 @@ shows up when you try a second client:
 
 All three agree the APK must be reachable **at the repository address**, and
 GitHub Pages cannot redirect a request. So [`worker/`](./worker) holds a small
-Cloudflare Worker that sits in front of Pages:
+Cloudflare Worker in front of Pages:
 
 ```
 client ──▶ worker/fdroid/repo/<apk>      ──302──▶  publisher's CDN
@@ -109,23 +102,6 @@ rather than hardcoding it, so if the publisher moves the CDN the scraper picks i
 up and the Worker follows with no redeploy. It is deployed by its own workflow
 whenever `worker/` changes; the daily update never touches it. See
 [step 5 of the setup guide](./docs/setup-github-actions-and-pages.md#5-deploy-the-redirector-recommended).
-
-## How a run works
-
-1. **Scrape** `https://bdon.biligames.com/`, collect every `<script src>`, and
-   download the bundles. Nothing is hardcoded: the bundle filenames contain
-   content hashes and change on every deploy.
-2. **Find** the single `.apk` URL in them. More than one is an error, not a
-   guess.
-3. **Compare** it against `releases.json`, the committed cache of everything
-   seen before, using the URL plus the CDN's `Content-Length`, `ETag` and
-   `Last-Modified`. **This is the step that keeps the daily job cheap** - an
-   unchanged check is a few HTTP requests, not a 450 MB download.
-4. **Download** the APK only when something actually changed. While it streams
-   past, the SHA-256 is computed; then the manifest and signing certificate are
-   read, and the file is deleted. Nothing is kept.
-5. **Publish** `index-v1.json`, `index-v2.json` and `entry.json` into signed
-   JARs, plus a landing page, onto the `gh-pages` branch.
 
 ## Quick start
 
@@ -252,6 +228,42 @@ tampered index is rejected.
   trick is necessary.
 
 ## Notes and limitations
+
+### The package name is not the one on Google Play
+
+The APK the website serves is **`com.bilibili.sirius.official`**. The Google Play
+listing linked from the same page is a *different application*,
+`com.bilibili.sirius`.
+
+That is not a typo. F-Droid keys everything on the package name, and the
+publisher's own client would refuse to update across two application ids, so the
+repository indexes the build the site actually distributes - the one an EN/TW/HK
+and Southeast Asian player gets.
+
+Related: `versionCode` is not derivable from the URL either. The current release
+is `1.0.1` at `versionCode 25`, which is why the APK has to be read at least once
+per new release. The build refuses to publish if the scraped link ever resolves
+to a different application than the one configured in `repo.json`.
+
+### The index must not claim the app is restricted
+
+F-Droid treats every entry in an app's `features` list as **mandatory**, and
+`fdroidserver` only records a `uses-feature` that has an `android:name` *and* is
+required. This project's manifest has no required features at all:
+
+```xml
+<uses-feature android:glEsVersion="0x30000"/>              <!-- no name -->
+<uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+```
+
+So the published index carries **no** feature list. An earlier version synthesised
+`glEsVersion196608` and listed every optional feature, and F-Droid then reported
+the app as incompatible with phones that ran it perfectly well from Google Play.
+`tests/test_features.py` pins the rule, and `releases.json` records which version
+of it produced each cached entry, so a change to the rules cannot be masked by
+stale metadata.
+
+### Everything else
 
 - The app is **proprietary**; `repo.json` says so explicitly via
   `"license": "Proprietary"`. This repository indexes the publisher's official
