@@ -309,6 +309,6 @@ stale metadata.
 
 MIT for this tool. [BanG Dream!](https://bang-dream.com/) is a trademark of
 [Bushiroad](https://bushiroad.co.jp/); the game was made by
-[FROMTOKYO](https://fromtokyo.co.jp/) and this Android build is published by
+[FROMTOKYO](https://www.fromtyo.jp/) and this Android build is published by
 BILIBILI HK LIMITED. The game is redistributed by its publisher, not by this
 project.
