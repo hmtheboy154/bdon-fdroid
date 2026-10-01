@@ -3,7 +3,7 @@
   "generator": "bdon-fdroid/1.0.0",
   "packageName": "com.bilibili.sirius.official",
   "manifestRules": 2,
-  "lastChecked": 1790761546583,
+  "lastChecked": 1790849528839,
   "lastChanged": 1790622370576,
   "releases": [
     {
