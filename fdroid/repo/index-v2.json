@@ -1,0 +1,267 @@
+{
+  "repo": {
+    "name": {
+      "en-US": "Unofficial BanG Dream! Our Notes index"
+    },
+    "address": "https://bdon-fdroid.hmtheboy154.workers.dev/fdroid/repo",
+    "description": {
+      "en-US": "Unofficial index of the official Android builds that BILIBILI HK publishes on the BanG Dream! Our Notes website. The APKs are downloaded from the publisher's own CDN, not from this site. Not affiliated with or endorsed by Bushiroad, FROMTOKYO or BILIBILI."
+    },
+    "mirrors": [
+      {
+        "url": "https://l12-pkg-download.biligames.com/sirius/apk/",
+        "countryCode": "CN"
+      }
+    ],
+    "timestamp": 1791018774244
+  },
+  "packages": {
+    "com.bilibili.sirius.official": {
+      "metadata": {
+        "name": {
+          "en-US": "BanG Dream! Our Notes"
+        },
+        "added": 1790934594252,
+        "lastUpdated": 1790934594252,
+        "summary": {
+          "en-US": "GEKISO Gameplay x Adventure rhythm game"
+        },
+        "description": {
+          "en-US": "<p>Presenting BanG Dream! Our Notes, a brand-new rhythm game adventure from BanG Dream! Project!</p><p>Enjoy a wide variety of songs from five bands and discover a rich new story waiting to unfold.</p><p><b>◆New Rhythm Game System: “GEKISO LIVE”◆</b><br>Special GEKISO sections will now appear during rhythm gameplay!<br>Combos, timing precision, and even luck—put your rhythm game skills to the ultimate challenge in an exciting new gameplay experience!<br>Feel the excitement and immersion of a real BanG Dream! live performance and enjoy the party-style rhythm gameplay with up to five players!</p><p>Our Notes also features an exclusive new system: Assist Mode!<br>Whether you're new to rhythm games or just looking for a more relaxed experience, Assist Mode lets everyone enjoy the performance and improve at their own pace.</p><p><b>◆From Original Songs to the Latest Hit Covers◆</b><br>From iconic original songs featured in the BanG Dream! anime—including tracks by MyGO!!!!! and Ave Mujica—to a wide range of popular cover songs, the lineup is packed with music to enjoy!<br>Play your favorite songs, from the latest hits to beloved classics.<br>You can also watch a variety of performance scenes and music videos from the BanG Dream! anime series.<br>Plus, the latest tracks from fan-favorite bands MyGO!!!!! and Ave Mujica will be available first in Our Notes!</p><p><b>【BanG Dream! Songs】</b><br>・Mayoiuta / MyGO!!!!!<br>・KiLLKiSS / Ave Mujica<br>・Haruhikage (MyGO!!!!! ver.) / MyGO!!!!!<br>・MUGEN MY WORLD / Mugendai MewType<br>・Kishi Kaisen / millsage<br>・Homie’s Tie!! / Ikka Dumb Rock!<br>...and many more</p><p>More cover songs will be coming up soon!</p><p><b>◆New Stories Woven by Five Bands◆</b><br>Alongside MyGO!!!!!, Ave Mujica, and Mugendai MewType, millsage and Ikka Dumb Rock! also join the stage!<br>With the Cinematic Story System, characters move vividly with rich expressions, just like in a movie or anime.<br>Special scenes also feature animated sequences, including all-new cuts.<br>A wide range of visual effects and illustrated scenes come together to deliver a spectacularly renewed story experience.</p><p>Relive the familiar anime stories of MyGO!!!!!, Ave Mujica, and Mugendai MewType from the game-exclusive perspective. You can also enjoy special episodes that continue the anime stories, available exclusively in Our Notes. Meanwhile, millsage and Ikka Dumb Rock! will unfold completely original stories from the very beginning.</p><p>Experience vibrant stories woven by five distinctive bands and a total of 25 unique members.</p><p><b>◆Official Website◆</b><br>https://bdon.biligames.com/?lang=en-us</p><p>©BanG Dream! Project ©FROMTOKYO ©Bushiroad. Published by BILIBILI HK LIMITED</p>"
+        },
+        "license": "Proprietary",
+        "categories": [
+          "Party Game"
+        ],
+        "webSite": "https://bdon.biligames.com/",
+        "authorName": "FROMTOKYO / published by BILIBILI HK LIMITED",
+        "icon": {
+          "en-US": {
+            "name": "/icons/com.bilibili.sirius.official.png",
+            "sha256": "123edc0a389dc22161ad20f1127a8bc15c836d27e1512ab70a2df58707569b76",
+            "size": 1098723
+          }
+        },
+        "screenshots": {
+          "phone": {
+            "en-US": [
+              {
+                "name": "/com.bilibili.sirius.official/en-US/phoneScreenshots/1.webp",
+                "sha256": "148c1677f61591fd2181e151839360ab5ec31a39a571ed9cc65e57e9e63b7a73",
+                "size": 335328
+              },
+              {
+                "name": "/com.bilibili.sirius.official/en-US/phoneScreenshots/2.webp",
+                "sha256": "33282efa78f5adb44b74a27cda685fb0b01a81b0a4dffaa29d9b1153aee68fe0",
+                "size": 285270
+              },
+              {
+                "name": "/com.bilibili.sirius.official/en-US/phoneScreenshots/3.webp",
+                "sha256": "5d0cc88255712090ab033fba2bfeb21059ae112e8250d32cd7e514ec2c11b2a9",
+                "size": 293964
+              },
+              {
+                "name": "/com.bilibili.sirius.official/en-US/phoneScreenshots/4.webp",
+                "sha256": "4dd240494e0c58223f731182bbd7b0b188cad56870c35de4427668fe5bf3b7d4",
+                "size": 315756
+              }
+            ]
+          }
+        },
+        "preferredSigner": "bf683e367551a3f629b90e16a63b315af74e387bcc5d94f26dcd626e7eea3637"
+      },
+      "versions": {
+        "e5786b7ddada9134f1bba7c0eac2f0c5a57f1defeba40f8f8b3e1db27065bc07": {
+          "added": 1790934594252,
+          "file": {
+            "name": "/BanGDreamOurNotes_1.0.2_2026_09_29_22_17_32.apk",
+            "sha256": "e5786b7ddada9134f1bba7c0eac2f0c5a57f1defeba40f8f8b3e1db27065bc07",
+            "size": 452888806
+          },
+          "manifest": {
+            "versionName": "1.0.2",
+            "versionCode": 50,
+            "usesSdk": {
+              "minSdkVersion": 26,
+              "targetSdkVersion": 36
+            },
+            "signer": {
+              "sha256": [
+                "bf683e367551a3f629b90e16a63b315af74e387bcc5d94f26dcd626e7eea3637"
+              ]
+            },
+            "usesPermission": [
+              {
+                "name": "android.permission.VIBRATE"
+              },
+              {
+                "name": "com.android.vending.BILLING"
+              },
+              {
+                "name": "android.permission.BLUETOOTH"
+              },
+              {
+                "name": "android.permission.BLUETOOTH_CONNECT"
+              },
+              {
+                "name": "android.permission.INTERNET"
+              },
+              {
+                "name": "android.permission.ACCESS_WIFI_STATE"
+              },
+              {
+                "name": "android.permission.READ_EXTERNAL_STORAGE"
+              },
+              {
+                "name": "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE"
+              },
+              {
+                "name": "com.google.android.gms.permission.AD_ID"
+              },
+              {
+                "name": "android.permission.ACCESS_NETWORK_STATE"
+              },
+              {
+                "name": "android.permission.WRITE_EXTERNAL_STORAGE"
+              },
+              {
+                "name": "android.permission.ACCESS_ADSERVICES_AD_ID"
+              },
+              {
+                "name": "android.permission.ACCESS_ADSERVICES_ATTRIBUTION"
+              },
+              {
+                "name": "android.permission.ACCESS_ADSERVICES_TOPICS"
+              },
+              {
+                "name": "android.permission.WAKE_LOCK"
+              },
+              {
+                "name": "android.permission.FOREGROUND_SERVICE"
+              },
+              {
+                "name": "com.bilibili.sirius.official.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+              },
+              {
+                "name": "android.permission.CHANGE_NETWORK_STATE"
+              },
+              {
+                "name": "android.permission.GET_TASKS"
+              },
+              {
+                "name": "android.permission.POST_NOTIFICATIONS"
+              },
+              {
+                "name": "android.permission.SCHEDULE_EXACT_ALARM"
+              },
+              {
+                "name": "com.samsung.android.mapsagent.permission.READ_APP_INFO"
+              },
+              {
+                "name": "com.google.android.c2dm.permission.RECEIVE"
+              },
+              {
+                "name": "android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE"
+              }
+            ]
+          }
+        },
+        "c0b6a1541e4562533aaeb2c65062cb6202913b2aec5aae80d371c4fc04409fa9": {
+          "added": 1790613694509,
+          "file": {
+            "name": "/BanGDreamOurNotes_1.0.1_2026_09_17_22_42_02.apk",
+            "sha256": "c0b6a1541e4562533aaeb2c65062cb6202913b2aec5aae80d371c4fc04409fa9",
+            "size": 446890829
+          },
+          "manifest": {
+            "versionName": "1.0.1",
+            "versionCode": 25,
+            "usesSdk": {
+              "minSdkVersion": 26,
+              "targetSdkVersion": 36
+            },
+            "signer": {
+              "sha256": [
+                "bf683e367551a3f629b90e16a63b315af74e387bcc5d94f26dcd626e7eea3637"
+              ]
+            },
+            "usesPermission": [
+              {
+                "name": "android.permission.VIBRATE"
+              },
+              {
+                "name": "com.android.vending.BILLING"
+              },
+              {
+                "name": "android.permission.BLUETOOTH"
+              },
+              {
+                "name": "android.permission.BLUETOOTH_CONNECT"
+              },
+              {
+                "name": "android.permission.INTERNET"
+              },
+              {
+                "name": "android.permission.ACCESS_WIFI_STATE"
+              },
+              {
+                "name": "android.permission.READ_EXTERNAL_STORAGE"
+              },
+              {
+                "name": "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE"
+              },
+              {
+                "name": "com.google.android.gms.permission.AD_ID"
+              },
+              {
+                "name": "android.permission.ACCESS_NETWORK_STATE"
+              },
+              {
+                "name": "android.permission.WRITE_EXTERNAL_STORAGE"
+              },
+              {
+                "name": "android.permission.ACCESS_ADSERVICES_AD_ID"
+              },
+              {
+                "name": "android.permission.ACCESS_ADSERVICES_ATTRIBUTION"
+              },
+              {
+                "name": "android.permission.ACCESS_ADSERVICES_TOPICS"
+              },
+              {
+                "name": "android.permission.WAKE_LOCK"
+              },
+              {
+                "name": "android.permission.FOREGROUND_SERVICE"
+              },
+              {
+                "name": "com.bilibili.sirius.official.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+              },
+              {
+                "name": "android.permission.CHANGE_NETWORK_STATE"
+              },
+              {
+                "name": "android.permission.GET_TASKS"
+              },
+              {
+                "name": "android.permission.POST_NOTIFICATIONS"
+              },
+              {
+                "name": "android.permission.SCHEDULE_EXACT_ALARM"
+              },
+              {
+                "name": "com.samsung.android.mapsagent.permission.READ_APP_INFO"
+              },
+              {
+                "name": "com.google.android.c2dm.permission.RECEIVE"
+              },
+              {
+                "name": "android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

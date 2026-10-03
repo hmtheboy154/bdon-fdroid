@@ -1,0 +1,42 @@
+{
+  "generator": "bdon-fdroid/1.0.0",
+  "packageName": "com.bilibili.sirius.official",
+  "repoAddress": "https://bdon-fdroid.hmtheboy154.workers.dev/fdroid/repo",
+  "repoUrlWithFingerprint": "https://bdon-fdroid.hmtheboy154.workers.dev/fdroid/repo?fingerprint=131acd74e957268f9d2026094386ad28d27711a8883f166abed39645727d61a4",
+  "signerFingerprint": "131acd74e957268f9d2026094386ad28d27711a8883f166abed39645727d61a4",
+  "signed": true,
+  "numPackages": 1,
+  "builtAt": 1791018776039,
+  "changed": false,
+  "checkedAt": 1791018766053,
+  "changedAt": 1790934594253,
+  "latest": {
+    "versionName": "1.0.2",
+    "versionCode": 50,
+    "size": 452888806,
+    "sha256": "e5786b7ddada9134f1bba7c0eac2f0c5a57f1defeba40f8f8b3e1db27065bc07",
+    "url": "https://l12-pkg-download.biligames.com/sirius/apk/BanGDreamOurNotes_1.0.2_2026_09_29_22_17_32.apk",
+    "mirrorBase": "https://l12-pkg-download.biligames.com/sirius/apk/"
+  },
+  "releases": [
+    {
+      "versionName": "1.0.2",
+      "versionCode": 50,
+      "sha256": "e5786b7ddada9134f1bba7c0eac2f0c5a57f1defeba40f8f8b3e1db27065bc07",
+      "size": 452888806,
+      "url": "https://l12-pkg-download.biligames.com/sirius/apk/BanGDreamOurNotes_1.0.2_2026_09_29_22_17_32.apk"
+    },
+    {
+      "versionName": "1.0.1",
+      "versionCode": 25,
+      "sha256": "c0b6a1541e4562533aaeb2c65062cb6202913b2aec5aae80d371c4fc04409fa9",
+      "size": 446890829,
+      "url": "https://l12-pkg-download.biligames.com/sirius/apk/BanGDreamOurNotes_1.0.1_2026_09_17_22_42_02.apk"
+    }
+  ],
+  "site": {
+    "website": "https://bdon.biligames.com/",
+    "playStore": "https://play.google.com/store/apps/details?id=com.bilibili.sirius",
+    "appStore": "https://apps.apple.com/us/app/bang-dream-our-notes/id6757695187"
+  }
+}
