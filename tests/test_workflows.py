@@ -386,5 +386,139 @@ class RedirectorCheckTests(unittest.TestCase):
         self.assertIn("exit 1", block, "the guard reports but does not fail the run")
 
 
+class LiveSiteJobGateTests(unittest.TestCase):
+    """The live-site check has to actually run.
+
+    It was gated on ``schedule || inputs.repo_url != ''``, and ``inputs`` is empty
+    on push and pull_request - so the job that verifies the published address and
+    the redirector was skipped on every ordinary push and ran once a week. The
+    defect it exists to catch could not be caught any sooner than a week after
+    being introduced.
+    """
+
+    #: Every comparison the gate is allowed to make. A new one has to be added
+    #: here deliberately, rather than silently falling through the evaluator.
+    VALUES = {
+        "github.event_name": "",
+        "inputs.repo_url": "",
+        "vars.REPO_URL": "",
+        "vars.REDIRECTOR_URL": "",
+    }
+
+    def setUp(self):
+        import yaml  # a test-only dependency; the daily job stays stdlib-only
+
+        self.path = WORKFLOWS / "conformance.yml"
+        self.condition = yaml.safe_load(
+            self.path.read_text(encoding="utf-8")
+        )["jobs"]["published"]["if"]
+
+    def _runs(self, event: str, repo_url: str = "", repo_var: str = "",
+              redirector: str = "") -> bool:
+        """Evaluate the gate the way Actions would, term by term."""
+        values = dict(self.VALUES, **{
+            "github.event_name": event,
+            "inputs.repo_url": repo_url,
+            "vars.REPO_URL": repo_var,
+            "vars.REDIRECTOR_URL": redirector,
+        })
+        clauses = [c.strip() for c in self.condition.split("||") if c.strip()]
+        for clause in clauses:
+            match = re.fullmatch(r"([\w.]+)\s*(!=|==)\s*(.+)", clause)
+            self.assertIsNotNone(match, f"unguarded clause in the gate: {clause!r}")
+            left, operator, raw_right = (g.strip() for g in match.groups())
+            self.assertIn(left, values, f"the gate reads an unmodelled value: {left}")
+            right = raw_right.strip("\"'")
+            if operator == "==":
+                if left in values:
+                    if values[left] == right:
+                        return True
+                elif left == right:
+                    return True
+            elif right == "":
+                if values.get(left, "") != "":
+                    return True
+            elif values.get(left, "") != right:
+                return True
+        return False
+
+    def test_it_runs_on_a_push(self):
+        self.assertTrue(self._runs("push", repo_var="https://x.example.com/fdroid/repo"))
+
+    def test_it_runs_on_the_weekly_schedule(self):
+        self.assertTrue(self._runs("schedule"))
+
+    def test_it_runs_on_a_manual_dispatch_with_an_address(self):
+        self.assertTrue(self._runs("workflow_dispatch", repo_url="https://x.example.com/fdroid/repo"))
+
+    def test_it_skips_a_push_for_a_fork_with_nothing_configured(self):
+        # Not a failure: a fork that has published nothing should not go red on
+        # every push it makes.
+        self.assertFalse(self._runs("push"))
+
+    def test_it_runs_when_only_the_redirector_is_configured(self):
+        self.assertTrue(self._runs("push", redirector="https://x.example.com"))
+
+    def test_it_runs_on_a_pull_request_when_configured(self):
+        self.assertTrue(self._runs("pull_request", repo_var="https://x.example.com/fdroid/repo"))
+
+    def test_it_is_not_left_weekly_only(self):
+        """The exact regression, asserted directly.
+
+        Compared for equality rather than substring: the widened gate does still
+        *contain* the old two terms, as the first two of four, so a substring
+        check would fail on the correct file.
+        """
+        flattened = " ".join(self.condition.split())
+        self.assertNotEqual(
+            flattened, "${{ github.event_name == 'schedule' || inputs.repo_url != '' }}"
+        )
+        self.assertGreaterEqual(len(self.condition.split("||")), 3)
+
+    def test_it_does_not_hard_fail_a_pull_request_from_a_fork(self):
+        self.assertFalse(self._runs("pull_request"))
+
+
+class ReleaseCommitGateTests(unittest.TestCase):
+    """The daily job must not commit a timestamp change.
+
+    ``lastChecked`` moves on every run by design, so diffing the whole file made
+    the workflow commit every single time - four identical-looking
+    "chore: record release" commits in a row, with a real new release buried
+    among them.
+    """
+
+    def setUp(self):
+        import yaml
+
+        self.path = WORKFLOWS / "update.yml"
+        document = yaml.safe_load(self.path.read_text(encoding="utf-8"))
+        step = next(
+            s for s in document["jobs"]["update"]["steps"]
+            if s.get("name") == "Commit the updated release history"
+        )
+        self.block = step["run"]
+
+    def test_it_compares_the_release_list_not_the_whole_file(self):
+        self.assertIn('json.loads(blob).get("releases")', self.block)
+        self.assertIn('json.load(open("releases.json")).get("releases")', self.block)
+
+    def test_it_no_longer_commits_on_a_whole_file_diff(self):
+        # This is what made every run a commit.
+        self.assertNotIn("git diff --quiet -- releases.json", self.block)
+
+    def test_it_reports_through_an_if_condition_so_set_e_does_not_abort(self):
+        # The comparison exits non-zero when the history changed, which under
+        # `set -e` would kill the step unless it sits in a condition.
+        self.assertRegex(self.block, r"if python3 - <<'PY'")
+        self.assertIn("sys.exit(0 if previous == current else 1)", self.block)
+
+    def test_a_first_run_with_no_recorded_history_still_commits(self):
+        # git show fails when the file is not in HEAD; that must read as
+        # "nothing recorded yet" rather than aborting the step.
+        self.assertIn("previous = None  # first run", self.block)
+        self.assertIn("except Exception:", self.block)
+
+
 if __name__ == "__main__":
     unittest.main()

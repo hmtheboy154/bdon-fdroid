@@ -91,8 +91,22 @@ jobs:
   published:
     name: Check the live site
     runs-on: ubuntu-latest
-    # Only meaningful once a repository has actually been published.
-    if: ${{ github.event_name == 'schedule' || inputs.repo_url != '' }}
+    # Runs whenever there is something to check, rather than only weekly.
+    # The old gate was `schedule || inputs.repo_url != ''`, which meant a push to
+    # main skipped this job entirely - so the redirector check below ran once a
+    # week and never after a change, and a real defect in it went unnoticed for
+    # as long as it took to notice it by email.
+    #
+    # The concern behind that gate, checking a repository that does not exist
+    # yet, is handled inside the job: the fingerprint step exits with a notice
+    # when nothing is published. What is *not* handled is a fork that has
+    # configured neither variable, so that still skips - cleanly, rather than
+    # failing a push it has no stake in.
+    if: >-
+      github.event_name == 'schedule' ||
+      inputs.repo_url != '' ||
+      vars.REPO_URL != '' ||
+      vars.REDIRECTOR_URL != ''
     steps:
       - uses: actions/checkout@v4
 

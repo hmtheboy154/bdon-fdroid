@@ -170,14 +170,38 @@ jobs:
       - name: Commit the updated release history
         # The history is the cache that makes the next run cheap, and the
         # changelog for anyone watching this repository.
+        #
+        # lastChecked moves on every run by design, so diffing the whole file
+        # made this commit on every single run and buried a genuine new release
+        # in routine noise - four identical-looking "record release" commits in
+        # a row. Only the release list itself is worth committing.
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- releases.json; then
-            echo "release history unchanged"
+
+          # A failing command in an `if` condition does not trip `set -e`, so
+          # the comparison reports through its exit status: 0 means unchanged.
+          if python3 - <<'PY'
+          import json, subprocess, sys
+          try:
+              blob = subprocess.run(
+                  ["git", "show", "HEAD:releases.json"],
+                  capture_output=True, text=True, check=True,
+              ).stdout
+              previous = json.loads(blob).get("releases")
+          except Exception:
+              previous = None  # first run; nothing recorded yet
+          current = json.load(open("releases.json")).get("releases")
+          if previous == current:
+              print("no new release; lastChecked moved but the history did not")
+          sys.exit(0 if previous == current else 1)
+          PY
+          then
+            echo "release history unchanged; not committing the timestamp alone"
             exit 0
           fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add releases.json
           git commit -m "chore: record release ${{ steps.build.outputs.version_name }}" \
                       -m "Automated by .github/workflows/update.yml"

@@ -25,7 +25,7 @@ python3 -m bdon_fdroid build      # fetch if new, then write + sign ./deploy
 python3 -m bdon_fdroid serve      # serve the output like a client would
 python3 -m bdon_fdroid verify --repo-url <url> --fingerprint <hex>
 
-python3 -m unittest discover -s tests        # 204 tests, stdlib only
+python3 -m unittest discover -s tests        # 216 tests, stdlib only
 (cd worker && node --test)                   # 18 tests
 ```
 
@@ -265,6 +265,31 @@ file.
 
 `tests/test_repo_json.py` covers the shipped configuration, which for a long time
 had **no** test coverage at all.
+
+### The live-site check used to run only weekly
+
+`conformance.yml`'s `published` job was gated on
+`github.event_name == 'schedule' || inputs.repo_url != ''`. `inputs` is empty on
+push and pull_request, so **the job that verifies the published address and the
+redirector was skipped on every ordinary push** and ran once a week, Mondays
+06:41 UTC. The defect described above could not be caught any sooner than a week
+after being introduced - and was not, for weeks.
+
+The gate now also runs when `vars.REPO_URL` or `vars.REDIRECTOR_URL` is set, so a
+configured repository checks on every push while a fork with nothing configured
+still skips cleanly rather than going red on a push it has no stake in. The
+original concern - checking a repository that does not exist yet - is handled
+inside the job, which exits with a notice when no fingerprint is published.
+
+### The daily job committed on every single run
+
+`lastChecked` in `releases.json` moves on every run by design, so the commit step
+compared the **whole file** and always found a difference: four identical-looking
+`chore: record release 1.0.2` commits in a row, with a genuine new release
+buried among them. It now compares the `releases` array and commits only when
+that list changes, so the history reads as a changelog instead of a heartbeat.
+The comparison reports through its exit status inside an `if`, because `set -e`
+would otherwise abort the step when it reports "changed".
 
 `tests/test_workflows.py` checks the workflow files structurally. It exists
 because an invalid workflow file is not a failing build - it is a file that
