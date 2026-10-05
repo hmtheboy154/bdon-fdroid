@@ -17,7 +17,9 @@ mistakes that actually occur and keeps the file readable.
 """
 
 import pathlib
+import ast
 import re
+import sys
 import unittest
 
 WORKFLOWS = pathlib.Path(__file__).resolve().parent.parent / ".github" / "workflows"
@@ -101,6 +103,64 @@ def _steps(lines: list[tuple[int, str]]) -> list[tuple[int, int, str, list[tuple
             in_steps = False
         index += 1
     return found
+
+
+def _job_condition(path: pathlib.Path, job: str) -> str | None:
+    """A job's ``if:`` expression, joined back into one line.
+
+    Line-based on purpose. ``yaml`` is not importable in the daily job or in
+    the plain-python unit job, and the whole point of these checks is that they
+    run everywhere the suite runs.
+    """
+    lines = _lines(path)
+    in_jobs = False
+    for index, (_number, text) in enumerate(lines):
+        if _key(text) == "jobs" and not text.lstrip(" ").startswith("-"):
+            in_jobs = True
+            continue
+        if not in_jobs or _is_item(text):
+            continue
+        if _key(text) != job:
+            continue
+        # The job's keys sit two levels in; take its `if:` and fold back the
+        # continuation lines that immediately follow it.
+        for offset, (n2, t2) in enumerate(lines[index + 1 :], start=1):
+            if t2.strip() and _indent(t2) <= 2:
+                return None  # the next job; ours had no `if:`
+            if _key(t2) == "if" and _indent(t2) == 4:
+                expr = t2.split(":", 1)[1].strip()
+                # A block scalar indicator (`>-`, `>`, `>-2`) is YAML's, not the
+                # expression's; the continuation lines carry the value.
+                expr = re.sub(r"^[>|][-+0-9]*\s*", "", expr)
+                for _n3, t3 in lines[index + 1 + offset :]:
+                    if t3.strip() and _indent(t3) > 4 and not t3.strip().startswith("#"):
+                        expr = expr.rstrip() + " " + t3.strip()
+                    else:
+                        break
+                return expr
+    return None
+
+
+def _step_script(path: pathlib.Path, name: str) -> str | None:
+    """The shell script of the step with this name, de-indented.
+
+    A ``run: |`` block's content is already uniformly indented by the YAML
+    parser, so stripping that common indent returns the script exactly as bash
+    would receive it.
+    """
+    all_lines = dict(_lines(path))
+    for number, _indent_level, key, body in _steps(_lines(path)):
+        if key != "name" or all_lines[number].split(":", 1)[1].strip() != name:
+            continue
+        for position, (_n, text) in enumerate(body):
+            if _key(text) != "run":
+                continue
+            rest = body[position + 1 :]
+            if not rest:
+                return text.split("|", 1)[1] if "|" in text else ""
+            width = _indent(rest[0][1])
+            return "\n".join(t[width:] if len(t) > width else t.strip() for _, t in rest)
+    return None
 
 
 class StepShapeTests(unittest.TestCase):
@@ -406,12 +466,9 @@ class LiveSiteJobGateTests(unittest.TestCase):
     }
 
     def setUp(self):
-        import yaml  # a test-only dependency; the daily job stays stdlib-only
-
         self.path = WORKFLOWS / "conformance.yml"
-        self.condition = yaml.safe_load(
-            self.path.read_text(encoding="utf-8")
-        )["jobs"]["published"]["if"]
+        self.condition = _job_condition(self.path, "published")
+        self.assertIsNotNone(self.condition, "the published job has no if: condition")
 
     def _runs(self, event: str, repo_url: str = "", repo_var: str = "",
               redirector: str = "") -> bool:
@@ -423,6 +480,9 @@ class LiveSiteJobGateTests(unittest.TestCase):
             "vars.REDIRECTOR_URL": redirector,
         })
         clauses = [c.strip() for c in self.condition.split("||") if c.strip()]
+        self.assertGreaterEqual(
+            len(clauses), 1, f"could not read the gate: {self.condition!r}"
+        )
         for clause in clauses:
             match = re.fullmatch(r"([\w.]+)\s*(!=|==)\s*(.+)", clause)
             self.assertIsNotNone(match, f"unguarded clause in the gate: {clause!r}")
@@ -430,10 +490,7 @@ class LiveSiteJobGateTests(unittest.TestCase):
             self.assertIn(left, values, f"the gate reads an unmodelled value: {left}")
             right = raw_right.strip("\"'")
             if operator == "==":
-                if left in values:
-                    if values[left] == right:
-                        return True
-                elif left == right:
+                if (values[left] if left in values else left) == right:
                     return True
             elif right == "":
                 if values.get(left, "") != "":
@@ -462,6 +519,9 @@ class LiveSiteJobGateTests(unittest.TestCase):
     def test_it_runs_on_a_pull_request_when_configured(self):
         self.assertTrue(self._runs("pull_request", repo_var="https://x.example.com/fdroid/repo"))
 
+    def test_it_does_not_hard_fail_a_pull_request_from_a_fork(self):
+        self.assertFalse(self._runs("pull_request"))
+
     def test_it_is_not_left_weekly_only(self):
         """The exact regression, asserted directly.
 
@@ -475,9 +535,6 @@ class LiveSiteJobGateTests(unittest.TestCase):
         )
         self.assertGreaterEqual(len(self.condition.split("||")), 3)
 
-    def test_it_does_not_hard_fail_a_pull_request_from_a_fork(self):
-        self.assertFalse(self._runs("pull_request"))
-
 
 class ReleaseCommitGateTests(unittest.TestCase):
     """The daily job must not commit a timestamp change.
@@ -489,15 +546,9 @@ class ReleaseCommitGateTests(unittest.TestCase):
     """
 
     def setUp(self):
-        import yaml
-
         self.path = WORKFLOWS / "update.yml"
-        document = yaml.safe_load(self.path.read_text(encoding="utf-8"))
-        step = next(
-            s for s in document["jobs"]["update"]["steps"]
-            if s.get("name") == "Commit the updated release history"
-        )
-        self.block = step["run"]
+        self.block = _step_script(self.path, "Commit the updated release history")
+        self.assertIsNotNone(self.block, "no such step in update.yml")
 
     def test_it_compares_the_release_list_not_the_whole_file(self):
         self.assertIn('json.loads(blob).get("releases")', self.block)
@@ -518,6 +569,87 @@ class ReleaseCommitGateTests(unittest.TestCase):
         # "nothing recorded yet" rather than aborting the step.
         self.assertIn("previous = None  # first run", self.block)
         self.assertIn("except Exception:", self.block)
+
+
+class StdlibOnlyTests(unittest.TestCase):
+    """Nothing in the project may import anything outside the standard library.
+
+    This is the project's own hard rule - the daily job must not grow a
+    ``pip install`` step - and it has no natural enforcement. It was broken by a
+    ``import yaml`` in a test, which passed locally and failed in CI: the
+    ``unit`` job and the daily ``update`` job both run the suite under plain
+    ``python3`` with no third-party packages available, so the daily job stopped
+    publishing before anything looked wrong.
+    """
+
+    ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+    #: Allowed even though it is not stdlib: it is an optional test-only
+    #: dependency, imported lazily behind a skipUnless, and is only installed in
+    #: the throwaway virtualenv the conformance job creates.
+    OPTIONAL = {"fdroidserver"}
+
+    @staticmethod
+    def _sources():
+        root = StdlibOnlyTests.ROOT
+        return sorted(list((root / "tests").glob("*.py")) +
+                      list((root / "bdon_fdroid").glob("*.py")))
+
+    @classmethod
+    def _imports(cls):
+        """Every module name imported anywhere in the project.
+
+        Parsed with ``ast`` rather than scanned with a regex, so a module name
+        mentioned in a docstring or a comment - which is exactly how this rule
+        gets described - is not mistaken for an import of it.
+        """
+        for path in cls._sources():
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        yield path, node.lineno, alias.name.split(".")[0]
+                elif isinstance(node, ast.ImportFrom) and not node.level:
+                    if node.module:
+                        yield path, node.lineno, node.module.split(".")[0]
+
+    def test_nothing_imports_a_package_that_is_not_installed(self):
+        allowed = set(sys.stdlib_module_names) | {"bdon_fdroid", "tests"} | self.OPTIONAL
+        offenders = [
+            f"{path.relative_to(self.ROOT)}:{number} imports {name!r}"
+            for path, number, name in self._imports()
+            if name not in allowed
+        ]
+        self.assertEqual(
+            offenders, [],
+            "non-stdlib imports, which fail in the daily and unit jobs:\n  "
+            + "\n  ".join(offenders),
+        )
+
+    def test_the_optional_dependency_is_still_optional(self):
+        """The one allowed non-stdlib import has to stay optional.
+
+        If ``fdroidserver`` ever became required, the allow-list above would be
+        hiding a real dependency instead of documenting a guarded one - and the
+        daily job would break in exactly the way this class exists to prevent.
+        """
+        source = (self.ROOT / "tests" / "test_conformance.py").read_text(encoding="utf-8")
+        self.assertIn("def _fdroidserver_available()", source)
+        self.assertIn("except ImportError", source)
+        # Both conformance classes are gated on it.
+        self.assertGreaterEqual(
+            source.count("skipUnless(_fdroidserver_available()"), 2
+        )
+
+    def test_the_guard_is_decided_by_importing_the_optional_module(self):
+        # Proves the allow-list is honest: the skip really does depend on the
+        # import failing, so the daily job is unaffected.
+        self.assertNotIn("fdroidserver", sys.stdlib_module_names)
+        try:
+            import fdroidserver  # noqa: F401
+        except ImportError:
+            return  # the common case in the daily and unit jobs
+        self.skipTest("fdroidserver is installed here, so the skip cannot be exercised")
 
 
 if __name__ == "__main__":

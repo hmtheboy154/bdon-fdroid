@@ -25,7 +25,7 @@ python3 -m bdon_fdroid build      # fetch if new, then write + sign ./deploy
 python3 -m bdon_fdroid serve      # serve the output like a client would
 python3 -m bdon_fdroid verify --repo-url <url> --fingerprint <hex>
 
-python3 -m unittest discover -s tests        # 216 tests, stdlib only
+python3 -m unittest discover -s tests        # 219 tests, stdlib only
 (cd worker && node --test)                   # 18 tests
 ```
 
@@ -40,6 +40,24 @@ python3 -m venv /tmp/fdcheck && /tmp/fdcheck/bin/pip install fdroidserver
 **Python 3.10+ standard library only.** No runtime dependencies, and CI must not
 grow a `pip install` step. Signing uses the JDK's `jarsigner`, which is already
 on the runner. If you need a parser, write it.
+
+This applies to the **tests** as well as the tool, and the reason is not
+theoretical: three places run the suite, and only one of them has anything
+installed. `conformance.yml`'s `unit` job and `update.yml`'s daily job both run
+plain `python3` with no third-party packages, so a single `import yaml` in a test
+errored there while passing on a developer machine that had it - and took the
+daily job with it, since that job runs the suite before committing, so nothing
+was published either. `StdlibOnlyTests` in `tests/test_workflows.py` now enforces
+it with `ast`, across `tests/` and `bdon_fdroid/`, with `fdroidserver` allowed
+only because it is imported lazily behind a skip.
+
+To reproduce a CI environment before committing:
+
+```bash
+python3 -m venv /tmp/bare && /tmp/bare/bin/python -m unittest discover -s tests
+```
+
+That venv has nothing in it, exactly like the unit and daily jobs.
 
 ## Hard rules
 
