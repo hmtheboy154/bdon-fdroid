@@ -202,12 +202,29 @@ class RepositoryVariableTests(unittest.TestCase):
     client could install from it.
     """
 
-    NAMES = ("REPO_URL", "REDIRECTOR_URL", "PAGES_ORIGIN", "REPO_URL_VARIABLE")
+    NAMES = ("REPO_URL", "REDIRECTOR_URL", "PAGES_ORIGIN", "REPO_URL_VARIABLE",
+             "REPO_ADDRESS")
 
     def setUp(self):
         self.paths = sorted(WORKFLOWS.glob("*.yml"))
         if not self.paths:
             self.skipTest("no workflow files found")
+
+    @staticmethod
+    def _written_to_env(path):
+        """Names written to ``$GITHUB_ENV``, which propagates to later steps.
+
+        This is the other legitimate way to bridge a value into the shell, so a
+        name published this way must not be reported as unbridged.
+        """
+        names = set()
+        for number, text in _lines(path):
+            if "GITHUB_ENV" not in text:
+                continue
+            match = re.search(r"\b([A-Z_][A-Z0-9_]*)=", text)
+            if match:
+                names.add(match.group(1))
+        return names
 
     def _code_lines(self, body):
         """Body lines with comments stripped out.
@@ -229,17 +246,18 @@ class RepositoryVariableTests(unittest.TestCase):
                     _key(text)
                     for _, text in self._code_lines(body)
                     if _key(text) in self.NAMES and text.split(":", 1)[1].strip()
-                }
+                } | self._written_to_env(path)
+                env_bridged = self._written_to_env(path)
                 for line_number, text in self._code_lines(body):
                     for name in self.NAMES:
-                        if name not in bridged:
+                        if name not in bridged or name in env_bridged:
                             continue
-                        for match in re.finditer(r"\$\{?" + name + r"(?=[}:\s\"])", text):
+                        for _match in re.finditer(r"\$\{?" + name + r"(?=[}:\s\"])", text):
                             with self.subTest(workflow=path.name, line=line_number, name=name):
                                 self.assertIn(
                                     f"{name}: ${{{{", "\n".join(t for _, t in body),
-                                    f"{path.name}:{line_number} reads ${{{name}}} but no "
-                                    f"env: entry bridges it",
+                                    f"{path.name}:{line_number} reads ${{{name}}} but "
+                                    f"nothing bridges it into the shell",
                                 )
 
     def test_a_repository_variable_is_bridged_through_vars(self):
@@ -282,6 +300,89 @@ class RepositoryVariableTests(unittest.TestCase):
         block = guard.group(0)
         self.assertIn("::error::", block, "the guard does not annotate the failure")
         self.assertIn("REPO_URL", block)
+        self.assertIn("exit 1", block, "the guard reports but does not fail the run")
+
+
+class RedirectorCheckTests(unittest.TestCase):
+    """The check that the redirector still hands out the APK.
+
+    This step failed on every run for a while and nothing noticed, because the
+    other step in the job was checking a different host. The rules here are the
+    ones whose absence made that possible.
+    """
+
+    def setUp(self):
+        self.path = WORKFLOWS / "conformance.yml"
+        self.source = self.path.read_text(encoding="utf-8")
+        self.block = self._step_named("Check the redirector serves the APK")
+
+    def _step_named(self, name: str) -> str:
+        """The body of the step with this name.
+
+        A step's ``name:`` is the item's own key, not a line in its body, so it
+        has to be read from the item line rather than from the body.
+        """
+        all_lines = dict(_lines(self.path))
+        for number, _indent, key, body in _steps(_lines(self.path)):
+            if key != "name":
+                continue
+            if all_lines[number].split(":", 1)[1].strip() == name:
+                return "\n".join(t for _, t in body)
+        self.fail(f"no step named {name!r} in {self.path.name}")
+
+    def test_no_workflow_uses_bare_urllib(self):
+        """Cloudflare 403s urllib's default User-Agent.
+
+        urllib sends ``Python-urllib/x.y``, a signature Cloudflare's managed
+        rules reject, so a bare urlopen fails against any address served by the
+        redirector while working against GitHub Pages. That asymmetry is what
+        made this look like a live-site outage instead of a script bug. curl is
+        already the idiom in these files; keep it that way.
+        """
+        for path in sorted(WORKFLOWS.glob("*.yml")):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(workflow=path.name):
+                self.assertNotIn("urllib.request", text)
+
+    def test_the_index_comes_from_the_published_address(self):
+        # REDIRECTOR_URL is the origin; the repository is under it at
+        # /fdroid/repo. Fetching "$REDIRECTOR_URL/index-v2.json" asks a path
+        # that does not exist, which is a 404 that reads like a broken site.
+        self.assertIn('curl -fsSL "$address/index-v2.json"', self.block)
+        self.assertNotIn("$REDIRECTOR_URL/index-v2.json", self.block)
+
+    def test_the_apk_is_probed_through_the_published_address(self):
+        self.assertIn("address=\"$REPO_ADDRESS\"", self.block)
+        self.assertIn("'%{redirect_url}' \"$address/$apk\"", self.block)
+
+    def test_the_address_is_resolved_once_and_shared(self):
+        # Two steps each deriving the address is how they came to disagree about
+        # which host was being checked.
+        self.assertIn('echo "REPO_ADDRESS=$address" >> "$GITHUB_ENV"', self.source)
+        self.assertEqual(
+            self.source.count('address="$REPO_ADDRESS"'),
+            2,
+            "both the verify step and the redirector step should read the "
+            "resolved address rather than deriving their own",
+        )
+
+    def test_the_conformance_job_checks_the_address_users_were_given(self):
+        # It used to read inputs.repo_url only, which is empty on push and
+        # schedule, so the job fell back to a Pages address nobody adds.
+        self.assertIn("REPO_URL_VARIABLE: ${{ vars.REPO_URL }}", self.source)
+        self.assertNotIn("REPO_URL: ${{ inputs.repo_url }}", self.source)
+
+    def test_the_redirector_is_still_required(self):
+        """...and none of this may make the check conditional again.
+
+        Scoped to the guard itself rather than the whole step: asserting on
+        "exit 1" anywhere in the block passes even after the guard has been
+        turned into a skip, because the later error branches still exit 1.
+        """
+        guard = re.search(r'if \[ -z "\$REDIRECTOR_URL" \].*?fi', self.block, re.S)
+        self.assertIsNotNone(guard, "the unset-REDIRECTOR_URL guard is gone")
+        block = guard.group(0)
+        self.assertIn("::error::", block, "the guard no longer reports the problem")
         self.assertIn("exit 1", block, "the guard reports but does not fail the run")
 
 

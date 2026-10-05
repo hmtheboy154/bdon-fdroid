@@ -22,7 +22,12 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
-USER_AGENT = "bdon-fdroid/1.0 (+https://github.com/f-droid/bdon-fdroid)"
+#: Sent on every request, and it matters. Cloudflare - which serves the
+#: redirector - answers 403 to urllib's default ``Python-urllib/x.y``, a
+#: well-known scraper signature, so a request that forgets to override it fails
+#: against the published address while working everywhere else. Any real client
+#: sends its own User-Agent and is unaffected.
+USER_AGENT = "bdon-fdroid/1.0 (+https://github.com/hmtheboy154/bdon-fdroid)"
 DEFAULT_TIMEOUT = 60
 CHUNK_SIZE = 1024 * 1024
 

@@ -25,7 +25,7 @@ python3 -m bdon_fdroid build      # fetch if new, then write + sign ./deploy
 python3 -m bdon_fdroid serve      # serve the output like a client would
 python3 -m bdon_fdroid verify --repo-url <url> --fingerprint <hex>
 
-python3 -m unittest discover -s tests        # 195 tests, stdlib only
+python3 -m unittest discover -s tests        # 204 tests, stdlib only
 (cd worker && node --test)                   # 18 tests
 ```
 
@@ -143,6 +143,21 @@ step is normal. It is only ambiguous when it leaves the step above it without a
 line-based rather than using a YAML parser, because the daily job may not gain a
 dependency.
 
+### Cloudflare 403s urllib's default User-Agent
+
+`urllib.request.urlopen` sends `Python-urllib/x.y`, a signature Cloudflare's
+managed rules reject with **403**. This bit the conformance job: the redirector
+check fetched the index with bare urllib against an address served by Cloudflare,
+got 403, and the run failed. Real F-Droid clients send their own User-Agent and
+are unaffected, so **users were never affected** - it only ever looked like the
+site was down.
+
+The trap is the asymmetry: bare urllib works against GitHub Pages and fails
+against the redirector, so the failure looks like an outage rather than a script
+bug. Use `curl` in workflow shell steps, and keep setting `USER_AGENT` in
+`http.py`. `tests/test_workflows.py` asserts no workflow mentions
+`urllib.request`; `tests/test_http.py` asserts the header is actually sent.
+
 ### `repo.address` is expensive; the fingerprint is not
 
 Changing `repo.address` means every user must **remove and re-add** the
@@ -255,6 +270,11 @@ had **no** test coverage at all.
 because an invalid workflow file is not a failing build - it is a file that
 parses as YAML, reads correctly, and is rejected by GitHub somewhere else
 entirely.
+
+**Its limit, worth stating:** these checks catch structure, not meaning. The
+conformance workflow passed every one of them while checking the wrong host and
+using a User-Agent that got it 403'd. A check that passes on a file that is
+semantically wrong tells you nothing about whether the file is right.
 
 ## Layout
 

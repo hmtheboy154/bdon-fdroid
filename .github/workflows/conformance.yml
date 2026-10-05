@@ -107,12 +107,35 @@ jobs:
           "$RUNNER_TEMP/fdcheck/bin/pip" install --quiet --disable-pip-version-check \
             "git+https://gitlab.com/fdroid/fdroidserver.git"
 
-      - name: Verify the published repository
+      - name: Work out the published address
+        # Resolved once, so the two checks below cannot disagree about which
+        # repository they are looking at.
         env:
-          REPO_URL: ${{ inputs.repo_url }}
+          # An explicit input wins, so a one-off check against a staging
+          # repository is possible. Otherwise the repository variable, which is
+          # the address users were actually told to add. Deriving the Pages
+          # address here instead would check something nobody uses, since a
+          # redirector is what makes the repository installable at all.
+          REPO_URL_INPUT: ${{ inputs.repo_url }}
+          REPO_URL_VARIABLE: ${{ vars.REPO_URL }}
         run: |
           set -euo pipefail
-          address="${REPO_URL:-https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/fdroid/repo}"
+
+          address="${REPO_URL_INPUT:-${REPO_URL_VARIABLE:-}}"
+          if [ -z "$address" ]; then
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            name="${GITHUB_REPOSITORY#*/}"
+            address="https://${owner}.github.io/${name}/fdroid/repo"
+            echo "::warning::no REPO_URL variable set; falling back to the Pages"
+            echo "::warning::address, which only the official F-Droid client can use."
+          fi
+          echo "published address: $address"
+          echo "REPO_ADDRESS=$address" >> "$GITHUB_ENV"
+
+      - name: Verify the published repository
+        run: |
+          set -euo pipefail
+          address="$REPO_ADDRESS"
 
           # The fingerprint is public: the landing page displays it precisely so
           # that anyone can check what F-Droid was told to trust.
@@ -145,20 +168,27 @@ jobs:
             exit 1
           fi
 
+          # Request the APK through the published address, which is the URL a
+          # client actually builds. A Pages address cannot redirect, so probing
+          # the wrong host would pass while the address users hold is broken.
+          address="$REPO_ADDRESS"
+
           # The APK name changes with every release, so discover it from the
-          # live index rather than hardcoding it.
-          apk=$(python3 -c '
-          import json, sys, urllib.request
-          index = json.load(urllib.request.urlopen(sys.argv[1] + "/index-v2.json"))
+          # live index rather than hardcoding it. curl rather than urllib:
+          # Cloudflare answers 403 to urllib's default User-Agent, and this URL
+          # is served by Cloudflare whenever a redirector is in use.
+          apk=$(curl -fsSL "$address/index-v2.json" | python3 -c '
+          import json, sys
+          index = json.load(sys.stdin)
           versions = next(iter(index["packages"].values()))["versions"]
           print(next(iter(versions.values()))["file"]["name"].lstrip("/"))
-          ' "$REDIRECTOR_URL")
-          echo "checking that $REDIRECTOR_URL/$apk redirects to the publisher's CDN"
+          ')
+          echo "checking that $address/$apk redirects to the publisher's CDN"
 
-          location=$(curl -sS -o /dev/null -w '%{redirect_url}' "$REDIRECTOR_URL/$apk")
+          location=$(curl -sS -o /dev/null -w '%{redirect_url}' "$address/$apk")
 
           if [ -z "$location" ]; then
-            echo "::error::no redirect from $REDIRECTOR_URL/$apk. Clients that cannot"
+            echo "::error::no redirect from $address/$apk. Clients that cannot"
             echo "::error::follow mirrors (Neo Store, Obtainium) cannot install the app."
             exit 1
           fi

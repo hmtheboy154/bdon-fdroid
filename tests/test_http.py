@@ -28,11 +28,17 @@ class _RangeIgnoringHandler(http.server.BaseHTTPRequestHandler):
 
     payload = PAYLOAD
     honour_range = True
+    #: Every User-Agent this server was asked with, so a test can assert on it.
+    seen_user_agents: list[str] = []
 
     def log_message(self, fmt, *args):
         pass
 
+    def _record(self):
+        _RangeIgnoringHandler.seen_user_agents.append(self.headers.get("User-Agent", ""))
+
     def do_HEAD(self):
+        self._record()
         self.send_response(200)
         self.send_header("Content-Type", "application/octet-stream")
         self.send_header("Content-Length", str(len(self.payload)))
@@ -43,6 +49,7 @@ class _RangeIgnoringHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        self._record()
         if self.path != "/file":
             self.send_error(404)
             return
@@ -222,6 +229,43 @@ class TextAndResolveTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+
+class UserAgentTests(unittest.TestCase):
+    """Every request identifies itself, and the value is a real one.
+
+    urllib's default ``Python-urllib/x.y`` is a signature Cloudflare's managed
+    rules answer with 403. Any request that forgets to override it therefore
+    works against GitHub Pages and fails against the published address, which is
+    the hardest kind of bug to spot: it looks like the site is down.
+    """
+
+    def setUp(self):
+        _RangeIgnoringHandler.seen_user_agents = []
+
+    def test_the_declared_user_agent_is_not_the_urllib_default(self):
+        self.assertNotIn("Python-urllib", bdon_http.USER_AGENT)
+        self.assertTrue(bdon_http.USER_AGENT.strip())
+        # urllib capitalises exactly this way when it is left to its own devices.
+        self.assertRegex(bdon_http.USER_AGENT, r"^\S+/\d")
+
+    def test_the_user_agent_names_this_project_not_another(self):
+        # It pointed at github.com/f-droid/bdon-fdroid, a repository that does
+        # not exist, which is the sort of thing nobody reads in a log.
+        self.assertIn("bdon-fdroid", bdon_http.USER_AGENT)
+        self.assertNotIn("f-droid/bdon-fdroid", bdon_http.USER_AGENT)
+
+    def test_a_request_actually_sends_it(self):
+        handler = _RangeIgnoringHandler
+        server = _Server(handler)
+        try:
+            bdon_http.get_text(server.url)
+        finally:
+            server.stop()
+        self.assertTrue(handler.seen_user_agents, "the request never reached the server")
+        for agent in handler.seen_user_agents:
+            self.assertEqual(agent, bdon_http.USER_AGENT)
+            self.assertNotIn("Python-urllib", agent)
 
 
 if __name__ == "__main__":
