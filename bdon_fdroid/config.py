@@ -71,6 +71,21 @@ class AppSettings:
 
 
 @dataclass
+class ConfigEndpointSettings:
+    """Pin the publisher's remote-config endpoint by hand.
+
+    Escape hatch only. The endpoint is normally *discovered* from the site's
+    JavaScript, the same way the webpack public path is, so a change to the
+    app key or namespace does not need a release here. Set these in
+    ``repo.json`` under ``configEndpoint`` if discovery ever fails.
+    """
+
+    app_key: str = ""
+    nscode: str = ""
+    api_url: str = ""
+
+
+@dataclass
 class AssetSettings:
     """Where the branding images come from.
 
@@ -100,6 +115,10 @@ class Config:
     #: project's repository: a fork publishes its own index, and a hardcoded
     #: link would send its visitors back here.  Unset renders as plain text.
     project_url: str = ""
+    #: Where the publisher's remote config lives, when it has to be pinned.
+    config_endpoint: ConfigEndpointSettings = field(
+        default_factory=ConfigEndpointSettings
+    )
     repo: RepoSettings = field(default_factory=RepoSettings)
     app: AppSettings = field(default_factory=AppSettings)
     assets: AssetSettings = field(default_factory=AssetSettings)
@@ -156,6 +175,12 @@ def _merge(target: dict, overrides: dict) -> None:
 def _from_dict(data: dict) -> Config:
     config = Config()
     config.project_url = data.get("projectUrl", "")
+    endpoint = data.get("configEndpoint", {})
+    config.config_endpoint = ConfigEndpointSettings(
+        app_key=str(endpoint.get("appKey", "")),
+        nscode=str(endpoint.get("nscode", "")),
+        api_url=str(endpoint.get("apiUrl", "")),
+    )
     repo = data.get("repo", {})
     config.repo = RepoSettings(
         name=repo.get("name", config.repo.name),

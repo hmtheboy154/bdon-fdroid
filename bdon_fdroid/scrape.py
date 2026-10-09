@@ -13,6 +13,7 @@ name on every deploy, so nothing here hardcodes a filename: we re-parse the
 from __future__ import annotations
 
 import html
+import json
 import re
 import urllib.parse
 from dataclasses import dataclass, field
@@ -53,11 +54,40 @@ _PLAY_STORE = re.compile(
 _APP_STORE = re.compile(
     r"""https?:(?:\\?/){2}apps\.apple\.com(?:\\?/)[A-Za-z0-9/%._-]*?id\d+"""
 )
+# The publisher moved the download link out of the bundle and into their remote
+# config service. The site still *asks* for it at runtime, from code shaped like:
+#
+#   k = new f$({appKey:"555.187", nscode:24, apiURL:"kv1.biligames.com"})
+#   k.getGroup("apklink").then(e => { link = e.link })
+#
+# So find the call, then the client that was constructed for it. The receiver is
+# matched too, because the bundles construct several clients for other
+# namespaces and picking the wrong one would ask the wrong question.
+_CONFIG_CALL = re.compile(
+    r"""(?P<recv>[A-Za-z_$][\w$]*)\s*\.\s*getGroup\(\s*["']apklink["']\s*\)"""
+)
+_CONFIG_ARGS = re.compile(
+    r"""appKey\s*:\s*["'](?P<app_key>[^"']+)["']"""
+    r""".{0,80}?nscode\s*:\s*(?P<nscode>\d+)"""
+    r""".{0,80}?apiURL\s*:\s*["'](?P<api_url>[^"']+)["']""",
+    re.S,
+)
+#: Path the SDK reads a namespace from. Undocumented and internal, so it is
+#: matched as a shape rather than assumed to be stable.
+_CONFIG_PATH = "/x/kv-frontend/namespace/data"
+
 # The CDN filenames look like ``BanGDreamOurNotes_1.0.1_2026_09_17_22_42_02.apk``.
 _APK_FILENAME = re.compile(
     r"^(?P<app>.+?)_(?P<version>[0-9][0-9A-Za-z._-]*)_"
     r"(?P<stamp>\d{4}(?:_\d{2}){5})\.apk$"
 )
+
+# The nearest-preceding client matters: the bundles construct several, one per
+# namespace, and the wrong one answers a different question.
+_CONFIG_CONSTRUCT = re.compile(
+    r"""(?P<recv>[A-Za-z_$][\w$]*)\s*=\s*new\s+[\w$.]+\s*\(\s*\{(?P<args>[^{}]*)\}"""
+)
+
 
 # Only JS from the game's own static host is worth scanning.
 _ALLOWED_HOST_SUFFIXES = ("biligames.com",)
@@ -212,10 +242,153 @@ def describe(url: str) -> ApkLink:
     )
 
 
-def discover(site_url: str = SITE_URL, fetch=get_text) -> tuple[ApkLink, SiteMetadata]:
+
+class ConfigEndpoint:
+    """The publisher's remote-config endpoint, as read out of their JavaScript."""
+
+    def __init__(self, api_url: str, app_key: str, nscode: str):
+        self.api_url = api_url
+        self.app_key = app_key
+        self.nscode = nscode
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return (
+            f"ConfigEndpoint(api_url={self.api_url!r}, app_key={self.app_key!r}, "
+            f"nscode={self.nscode!r})"
+        )
+
+    def url(self) -> str:
+        """The request that returns this namespace's data."""
+        base = self.api_url
+        if "://" not in base:
+            base = "https://" + base  # the bundles write it without a scheme
+        query = urllib.parse.urlencode(
+            {"appKey": self.app_key, "nscode": self.nscode, "unlimit": "true"}
+        )
+        return f"{base.rstrip('/')}{_CONFIG_PATH}?{query}"
+
+
+def find_config_endpoint(bundle_bodies: list[str]) -> ConfigEndpoint | None:
+    """Find the remote-config endpoint the site reads the APK link from.
+
+    Returns ``None`` when the bundles contain no such call, which is the normal
+    case for a site that hardcodes the link instead. This is not an API in any
+    documented sense: it is the publisher's internal feature-flag backend, read
+    out of their own bundle rather than taken on trust. There is no version
+    list, no history and no enumeration - only a URL to whatever is current.
+    """
+    for body in bundle_bodies:
+        for call in _CONFIG_CALL.finditer(body):
+            receiver = call.group("recv")
+            constructor = re.compile(
+                re.escape(receiver)
+                + r"""\s*=\s*new\s+[\w$.]+\s*\(\s*\{(?P<args>[^{}]*)\}"""
+            )
+            # The client built for this call is the nearest one before it; the
+            # bundles construct several, one per namespace, and the others
+            # answer unrelated questions.
+            chosen = None
+            for match in constructor.finditer(body):
+                if match.end() <= call.start():
+                    chosen = match
+            if chosen is None:
+                continue
+            args = _CONFIG_ARGS.search(chosen.group("args"))
+            if args:
+                return ConfigEndpoint(
+                    api_url=args.group("api_url"),
+                    app_key=args.group("app_key"),
+                    nscode=args.group("nscode"),
+                )
+    return None
+
+
+def fetch_config_apk_url(endpoint: ConfigEndpoint, fetch=get_text) -> tuple[str, bool]:
+    """Read ``apklink.link`` from the endpoint.
+
+    Returns the URL and whether the publisher's own switch says the direct APK is
+    currently offered at all. That switch is a remote kill switch: if it goes to
+    ``false`` the link may still resolve while the site has stopped advertising
+    it, which is worth saying out loud rather than silently indexing.
+    """
+    try:
+        payload = json.loads(fetch(endpoint.url()))
+    except (HttpError, ValueError) as exc:
+        raise ScrapeError(f"could not read {endpoint.url()}: {exc}") from exc
+
+    if not isinstance(payload, dict) or payload.get("code") not in (0, "0"):
+        raise ScrapeError(
+            f"{endpoint.url()} did not return config data: "
+            f"{payload.get('code') if isinstance(payload, dict) else payload!r} "
+            f"{payload.get('message') if isinstance(payload, dict) else ''}".strip()
+        )
+    data = payload.get("data", {})
+    values = data.get("data", {}) if isinstance(data, dict) else {}
+    link = values.get("apklink.link")
+    if not isinstance(link, str) or not link:
+        raise ScrapeError(
+            f"{endpoint.url()} returned no apklink.link; keys were "
+            + ", ".join(sorted(values)) or "(none)"
+        )
+    switch = values.get("switch.isopen")
+    return link, switch in ("true", True, "True")
+
+
+def _discover_via_config(
+    site_url: str,
+    fetch,
+    pinned: "ConfigEndpoint | None",
+    bundles: list[str],
+    bundle_bodies: list[str],
+    metadata: SiteMetadata,
+) -> tuple[ApkLink, SiteMetadata]:
+    """Fall back to the publisher's remote config for the APK link.
+
+    Only reached when no bundle carries a literal, so the failure message that
+    used to end the run now describes both sources.
+    """
+    endpoint = pinned or find_config_endpoint(bundle_bodies)
+    if endpoint is None:
+        raise ScrapeError(
+            f"no .apk URL found in any bundle of {site_url} "
+            f"({len(bundles)} scanned), and the bundles declare no remote-config "
+            "endpoint to ask. The download button has moved somewhere this scraper "
+            "does not know about; set configEndpoint in repo.json if you know where."
+        )
+
+    print(f"  no .apk URL in any bundle; asking {endpoint.api_url} instead")
+    apk_url, enabled = fetch_config_apk_url(endpoint, fetch)
+    if not enabled:
+        print(
+            "  warning: the publisher's own switch.isopen is not 'true'; the direct "
+            "APK may stop being offered at any time, and this index will stop updating."
+        )
+    if not _allowed(apk_url):
+        raise ScrapeError(f"APK URL is not on a biligames.com host: {apk_url}")
+
+    metadata.app_icon = find_app_icon(bundle_bodies)
+    if metadata.app_icon:
+        print(f"  app icon: {metadata.app_icon.rsplit('/', 1)[-1]}")
+    else:
+        print("  app icon: not found; falling back to the configured icon")
+    return describe(apk_url), metadata
+
+
+def discover(
+    site_url: str = SITE_URL,
+    fetch=get_text,
+    config_endpoint: "ConfigEndpoint | None" = None,
+) -> tuple[ApkLink, SiteMetadata]:
     """Fetch the site, scan its bundles, and return the APK link + metadata.
 
     ``fetch`` is injectable so tests can run against a saved copy of the site.
+
+    Two sources, in order. The APK link used to be a string literal in one of
+    the site's bundles; it now arrives from the publisher's remote-config
+    service instead, and the visible Android button points at Google Play. The
+    literal is still tried first, because if the publisher ever hardcodes it
+    again that is the more direct answer, and because a bundle that *does* carry
+    the link needs no second request.
     """
     try:
         document = fetch(site_url)
@@ -244,11 +417,9 @@ def discover(site_url: str = SITE_URL, fetch=get_text) -> tuple[ApkLink, SiteMet
         _collect_store_links(body, metadata)
 
     if not candidates:
-        raise ScrapeError(
-            "no .apk URL found in any bundle of "
-            f"{site_url} ({len(bundles)} bundle(s) scanned). "
-            "The download button may have moved to a different file."
-        )
+        return _discover_via_config(site_url, fetch, config_endpoint, bundles, bundle_bodies,
+                                    metadata)
+
     if len(candidates) > 1:
         listing = "\n  ".join(sorted(candidates))
         raise ScrapeError(

@@ -8,6 +8,17 @@
   ],
   "projectUrl": "https://github.com/hmtheboy154/bdon-fdroid",
 
+  "_commentConfigEndpoint": [
+    "Escape hatch only. The publisher's remote-config endpoint is discovered",
+    "from the site's JavaScript, the same way the webpack public path is, so",
+    "these stay empty. Set all three only if discovery fails; all are needed."
+  ],
+  "configEndpoint": {
+    "appKey": "",
+    "nscode": "",
+    "apiUrl": ""
+  },
+
   "repo": {
     "_comment": [
       "address must be the full URL users add in F-Droid, ending in /fdroid/repo.",

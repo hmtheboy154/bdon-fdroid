@@ -23,7 +23,7 @@ from .config import Config, ConfigError, load as load_config
 from .http import HttpError
 from .indexgen import LOCALE, Asset, Assets, RepoBuildError, write_repository
 from .landing import write as write_landing
-from .scrape import ScrapeError, discover
+from .scrape import ConfigEndpoint, ScrapeError, discover
 from .signing import KeyStore, SigningError, sign_index_files
 from .state import State, load as load_state, save as save_state
 
@@ -87,10 +87,22 @@ def _keystore(args) -> KeyStore | None:
     return KeyStore(path, alias, password)
 
 
+def _pinned_endpoint(config) -> "ConfigEndpoint | None":
+    """Turn a hand-set ``configEndpoint`` block into an endpoint, if it is set."""
+    pinned = config.config_endpoint
+    if not (pinned.app_key and pinned.nscode and pinned.api_url):
+        return None
+    return ConfigEndpoint(
+        api_url=pinned.api_url, app_key=pinned.app_key, nscode=pinned.nscode
+    )
+
 def _scrape(args) -> tuple[Config, object, object]:
     config = _load(args)
     _out(f"scraping {config.site_url} ...")
-    link, site = discover(config.site_url)
+    link, site = discover(
+        config.site_url,
+        config_endpoint=_pinned_endpoint(config) or None,
+    )
     return config, link, site
 
 

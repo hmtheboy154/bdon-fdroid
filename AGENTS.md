@@ -25,7 +25,7 @@ python3 -m bdon_fdroid build      # fetch if new, then write + sign ./deploy
 python3 -m bdon_fdroid serve      # serve the output like a client would
 python3 -m bdon_fdroid verify --repo-url <url> --fingerprint <hex>
 
-python3 -m unittest discover -s tests        # 219 tests, stdlib only
+python3 -m unittest discover -s tests        # 240 tests, stdlib only
 (cd worker && node --test)                   # 18 tests
 ```
 
@@ -245,9 +245,25 @@ Related shape difference, if you are writing assertions: v2 **localises**
 
 ## Scraping notes
 
-- The download URL is a string literal inside one of the site's **hashed JS
-  bundles**, found via the webpack public path. There is no API and no version
-  metadata anywhere on the site.
+- The download URL is found in the site's **hashed JS bundles**. There is no API
+  and no version metadata anywhere on the site; the CDN directory 403s, so
+  releases cannot be enumerated - only polled for.
+- **It is no longer a string literal.** The publisher moved it behind their
+  internal feature-flag service, and the site's Android button now points at
+  Google Play. The scraper reads the link from
+  `kv1.biligames.com/x/kv-frontend/namespace/data` -> `apklink.link`, with the
+  `appKey`/`nscode`/`apiURL` **discovered from the bundle** rather than
+  hardcoded, because the bundles construct one client per namespace and only
+  the nearest one before `getGroup("apklink")` is the right one to ask. The
+  literal scan still runs first, so a publisher that hardcodes it again needs no
+  second request.
+- **This is not an API in the documented sense** - it is their internal config
+  backend, unauthenticated but with no stability guarantee. It returns one URL
+  to the current APK and nothing else.
+- **`switch.isopen` is a remote kill switch.** If the publisher sets it to
+  `false` the link still resolves while the site stops advertising the direct
+  APK, so nothing fails and the index would quietly stop updating. The scraper
+  warns; that warning is the only signal, so do not silence it.
 - The **app icon** comes from the site's own image assets. The page has no
   `apple-touch-icon` and its only `rel=icon` is a 16px favicon. The repository
   icon is the page's `og:image`.
