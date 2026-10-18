@@ -108,10 +108,14 @@ class Assets:
     repo_icon: Asset | None = None
     app_icon: Asset | None = None
     feature_graphic: Asset | None = None
+    #: The landing page's browser-tab icon. Not referenced by the index at all;
+    #: it exists because the page links it.
+    favicon: Asset | None = None
     screenshots: list[Asset] = field(default_factory=list)
 
     def write_all(self, root: str) -> "Assets":
-        for asset in [self.repo_icon, self.app_icon, self.feature_graphic, *self.screenshots]:
+        for asset in [self.repo_icon, self.app_icon, self.feature_graphic,
+                      self.favicon, *self.screenshots]:
             if asset is not None:
                 asset.write(root)
         return self
@@ -381,6 +385,10 @@ def write_repository(
                 feature_entry = {LOCALE: entry}
     for asset in assets.screenshots:
         screenshot_entries.append(asset.write(root))
+    if assets.favicon is not None:
+        # Deliberately outside the loop above: it is named by nothing in the
+        # index, so it must not acquire an entry, a hash or a localised block.
+        assets.favicon.write(root)
 
     index_v1 = build_index_v1(config, releases, assets)
     index_v2 = build_index_v2(
@@ -395,7 +403,8 @@ def write_repository(
 
     published = [
         asset.name
-        for asset in [assets.repo_icon, assets.app_icon, assets.feature_graphic, *assets.screenshots]
+        for asset in [assets.repo_icon, assets.app_icon, assets.feature_graphic,
+                      assets.favicon, *assets.screenshots]
         if asset is not None
     ]
     return {

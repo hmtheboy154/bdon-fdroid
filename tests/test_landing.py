@@ -313,6 +313,48 @@ class FooterProjectLinkTests(unittest.TestCase):
         self.assertIn("&quot;", document)
 
 
+class FaviconTests(unittest.TestCase):
+    """The tab icon is published next to the page, not hot-linked.
+
+    A link straight to the publisher's CDN would make our page depend on their
+    availability to render at all, and would leak every visitor to them.
+    """
+
+    def test_the_page_declares_a_favicon(self):
+        head = _head(_render())
+        self.assertIn('<link rel="icon"', head)
+
+    def test_the_favicon_is_relative(self):
+        head = _head(_render())
+        hrefs = re.findall(r'<link[^>]*rel="icon"[^>]*href="([^"]*)"', head)
+        self.assertTrue(hrefs, "no rel=icon link")
+        for href in hrefs:
+            self.assertFalse(
+                href.startswith(("http://", "https://", "//")),
+                f"{href} is absolute; the file is published here",
+            )
+
+    def test_the_favicon_is_not_declared_with_a_vector_sizes_hint(self):
+        # This is a multi-resolution raster ICO. sizes="any" claims it can be
+        # scaled to any size, which can hand a 16px tab the 64px entry.
+        head = _head(_render())
+        for tag in re.findall(r"<link[^>]*rel=\"icon\"[^>]*>", head):
+            self.assertNotIn("sizes=", tag)
+
+    def test_a_hostile_favicon_url_cannot_escape_the_page(self):
+        # The page never interpolates a configured URL here, so there is nothing
+        # to escape; assert that rather than trusting it.
+        config = _config()
+        config.assets.favicon_url = 'https://x.example/"onload="alert(1)'
+        head = _head(landing.render(config, _state(), FINGERPRINT))
+        self.assertNotIn("onload", head)
+        self.assertIn('href="favicon.ico"', head)
+
+
+def _head(document: str) -> str:
+    return document[: document.index("</head>")]
+
+
 class MissingDataTests(unittest.TestCase):
     def test_renders_without_any_release(self):
         # A first run that has not found an APK yet must still produce a page.

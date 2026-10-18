@@ -76,6 +76,15 @@ _CONFIG_ARGS = re.compile(
 #: matched as a shape rather than assumed to be stable.
 _CONFIG_PATH = "/x/kv-frontend/namespace/data"
 
+# The site's own browser-tab icon, which lives in a <link> rather than a <meta>.
+# The whole tag is captured first and the two attributes are read out of it
+# separately, because nothing guarantees that rel comes before href.
+_LINK_TAG = re.compile(r"<link\b[^>]*>", re.I | re.S)
+_LINK_ATTR = re.compile(
+    r"""\b(?P<name>rel|href)\s*=\s*(?P<q>["'])(?P<value>[^"']*)(?P=q)""",
+    re.I | re.S,
+)
+
 # The CDN filenames look like ``BanGDreamOurNotes_1.0.1_2026_09_17_22_42_02.apk``.
 _APK_FILENAME = re.compile(
     r"^(?P<app>.+?)_(?P<version>[0-9][0-9A-Za-z._-]*)_"
@@ -121,6 +130,7 @@ class SiteMetadata:
     description: str = ""
     og_image: str = ""
     app_icon: str = ""
+    favicon: str = ""
     play_store: str = ""
     app_store: str = ""
     bundles: list[str] = field(default_factory=list)
@@ -141,12 +151,27 @@ def _clean(meta_url: str) -> str:
     return html.unescape(meta_url).strip()
 
 
+def find_favicon(document: str) -> str:
+    """The page's own browser-tab icon, if it declares one.
+
+    ``rel="icon"`` and ``rel="shortcut icon"`` both mean it. ``apple-touch-icon``
+    is deliberately excluded: that is a different image, sized for a home screen,
+    and using it for a tab renders it downscaled and blurry.
+    """
+    for tag in _LINK_TAG.finditer(document):
+        attributes = {m.group("name").lower(): m.group("value") for m in _LINK_ATTR.finditer(tag.group(0))}
+        tokens = attributes.get("rel", "").lower().split()
+        if "icon" in tokens and "apple-touch-icon" not in tokens:
+            return _clean(attributes.get("href", ""))
+    return ""
+
+
 def _allowed(url: str) -> bool:
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
     return any(host == suffix or host.endswith("." + suffix) for suffix in _ALLOWED_HOST_SUFFIXES)
 
 
-def parse_metadata(document: str) -> SiteMetadata:
+def parse_metadata(document: str, base_url: str = SITE_URL) -> SiteMetadata:
     """Pull the interesting bits out of the site's ``<head>``."""
     meta = SiteMetadata()
     for match in _META.finditer(document):
@@ -162,6 +187,10 @@ def parse_metadata(document: str) -> SiteMetadata:
             meta.og_image = value
         elif key not in meta.extra:
             meta.extra[key] = value
+
+    icon = find_favicon(document)
+    if icon:
+        meta.favicon = resolve(base_url, icon)
 
     title = _TITLE.search(document)
     if title and not meta.title:

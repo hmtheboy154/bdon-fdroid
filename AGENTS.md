@@ -25,7 +25,7 @@ python3 -m bdon_fdroid build      # fetch if new, then write + sign ./deploy
 python3 -m bdon_fdroid serve      # serve the output like a client would
 python3 -m bdon_fdroid verify --repo-url <url> --fingerprint <hex>
 
-python3 -m unittest discover -s tests        # 240 tests, stdlib only
+python3 -m unittest discover -s tests        # 269 tests, stdlib only
 (cd worker && node --test)                   # 18 tests
 ```
 
@@ -265,8 +265,15 @@ Related shape difference, if you are writing assertions: v2 **localises**
   APK, so nothing fails and the index would quietly stop updating. The scraper
   warns; that warning is the only signal, so do not silence it.
 - The **app icon** comes from the site's own image assets. The page has no
-  `apple-touch-icon` and its only `rel=icon` is a 16px favicon. The repository
-  icon is the page's `og:image`.
+  `apple-touch-icon` - the real icon is a webpack asset, so it is not in the HTML
+  at all. The repository icon is the page's `og:image`.
+- The **favicon** is the page's `<link rel=icon>`, republished as
+  `favicon.ico` next to the landing page and linked *relatively*. It is a
+  multi-resolution ICO (16/24/32/48/64px), not a 16px one, so no `sizes`
+  attribute: the browser picks the right entry from the file's own directory,
+  and `sizes="any"` would claim it scales, which a raster cannot. Hot-linking
+  the publisher's CDN instead would make our page depend on their availability
+  to render, so do not.
 - **Screenshots are pinned in `repo.json`** because the site's images are
   content-hashed; any URL pasted there must be updated by hand when the site is
   redesigned.
@@ -298,7 +305,10 @@ the other class builds from the dataclass defaults and never saw the published
 file.
 
 `tests/test_repo_json.py` covers the shipped configuration, which for a long time
-had **no** test coverage at all.
+had **no** test coverage at all. `tests/test_assets.py` does the same for
+`_build_assets`, which decides *which* images are published - it had none, which
+is how the favicon could be wired to the wrong source and still render a
+perfectly plausible page.
 
 ### The live-site check used to run only weekly
 

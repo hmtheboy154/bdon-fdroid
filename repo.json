@@ -71,12 +71,14 @@
     "_comment": [
       "All of these are optional. Leave one empty to have it scraped from the official site.",
       "iconUrl     - repository icon; defaults to the page's og:image (small, square).",
+      "faviconUrl  - the landing page's tab icon; defaults to the page's <link rel=icon>.",
       "appIconUrl  - the game's own icon; scraped from the site's image assets, because the page",
       "               has no apple-touch-icon and its only rel=icon is a 16px favicon.",
       "screenshotUrls - pinned screenshots. The site's own images are content-hashed, so any URL",
       "               pasted here must be updated by hand when the site is redesigned."
     ],
     "iconUrl": "",
+    "faviconUrl": "",
     "appIconUrl": "",
     "screenshotUrls": [
       "https://play-lh.googleusercontent.com/q50FxT3SlQywy7ITJkI_NpodKRO-zh37ZqQTYh_ZrUacVarYJORjivkgsH4eR9M2WkBmpHGRKq7chh4CnE5FLCA=w2560-h1440-rw",

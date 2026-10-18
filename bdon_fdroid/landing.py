@@ -131,6 +131,14 @@ def render(
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{_esc(config.repo.name)} &middot; F-Droid repository</title>\n"
         f'<meta name="description" content="{_esc(config.app.summary)}">\n'
+        # Relative on purpose: the favicon is published next to this page, so
+        # the page never fetches anything from the publisher's CDN to render.
+        #
+        # No `sizes` attribute: this is a multi-resolution ICO, so the browser
+        # picks the right entry from the file's own directory. `sizes="any"`
+        # would be a lie about a raster image and can hand a 16px tab the 64px
+        # entry.
+        '<link rel="icon" href="favicon.ico">\n'
         f"<style>{_CSS}</style>\n"
         f"</head>\n<body>\n<main>\n"
     )

@@ -206,6 +206,14 @@ def _build_assets(config, site) -> Assets:
     if icon_source:
         assets.app_icon = _asset(icon_source, f"icons/{package}")
 
+    # The favicon goes on our own page, not into the index, so it is only ever
+    # referenced by the landing page - relative, so nothing external is fetched.
+    favicon_source = config.assets.favicon_url or site.favicon
+    if favicon_source:
+        assets.favicon = _asset(favicon_source, "favicon")
+        if assets.favicon is None:
+            _out("  warning: no favicon; the page will show a default browser icon")
+
     for index, url in enumerate(
         config.assets.screenshot_urls[: config.assets.max_screenshots], start=1
     ):

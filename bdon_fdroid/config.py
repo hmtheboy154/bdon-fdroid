@@ -98,9 +98,13 @@ class AssetSettings:
     #: page's ``og:image``, which is small and square.
     icon_url: str = ""
     #: The game's own icon. Scraped from the site's image assets, because the
-    #: page has no ``<link rel=apple-touch-icon>`` and its only ``rel=icon`` is a
-    #: 16px favicon.
+    #: page has no ``<link rel=apple-touch-icon>`` - the real icon is a webpack
+    #: asset, so it never appears in the HTML.
     app_icon_url: str = ""
+    #: The page's own ``<link rel=icon>``, republished as this site's favicon so
+    #: the landing page does not have to fetch anything from the publisher's CDN
+    #: to render. Scraped from the HTML; set this to pin a specific file.
+    favicon_url: str = ""
     screenshot_urls: list[str] = field(default_factory=list)
     max_screenshots: int = 4
     feature_graphic_url: str = ""
@@ -207,6 +211,7 @@ def _from_dict(data: dict) -> Config:
     config.assets = AssetSettings(
         icon_url=assets.get("iconUrl", ""),
         app_icon_url=assets.get("appIconUrl", ""),
+        favicon_url=assets.get("faviconUrl", ""),
         screenshot_urls=list(assets.get("screenshotUrls", [])),
         max_screenshots=int(assets.get("maxScreenshots", config.assets.max_screenshots)),
         feature_graphic_url=assets.get("featureGraphicUrl", ""),

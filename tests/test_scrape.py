@@ -23,6 +23,7 @@ INDEX_HTML = """
   '"><\\/script>'
 );
 </script>
+<link rel="icon" href="//s1.biligames.com/fe-static/game/gw/images/common/favicon.ico" type="image/vnd.microsoft.icon"/>
 <script defer="defer" src="//s1.biligames.com/fe-static/game/gw/js/chunk-vendors.076929bc.js"></script>
 <script defer="defer" src="//s1.biligames.com/fe-static/game/gw/js/chunk-common.79593525.js"></script>
 <script defer="defer" src="//s1.biligames.com/fe-static/game/gw/js/index.38a78496.js"></script>
@@ -405,6 +406,65 @@ class DiscoverConfigFallbackTests(unittest.TestCase):
 
         with self.assertRaises(scrape.ScrapeError):
             scrape.discover(fetch=fetch)
+
+
+class FindFaviconTests(unittest.TestCase):
+    """The page's own browser-tab icon, which lives in a <link> not a <meta>."""
+
+    HEAD = (
+        '<link rel="icon" href="https://s1.biligames.com/gw/images/common/favicon.ico" '
+        'type="image/vnd.microsoft.icon"/>'
+    )
+
+    def test_finds_the_icon_link(self):
+        self.assertEqual(scrape.find_favicon(self.HEAD), scrape.find_favicon(self.HEAD))
+        self.assertIn("favicon.ico", scrape.find_favicon(self.HEAD))
+
+    def test_resolves_a_protocol_relative_href(self):
+        document = '<link rel="icon" href="//s1.biligames.com/gw/favicon.ico"/>'
+        meta = scrape.parse_metadata(document)
+        self.assertEqual(meta.favicon, "https://s1.biligames.com/gw/favicon.ico")
+
+    def test_attribute_order_does_not_matter(self):
+        document = '<link href="https://s1.example.com/f.ico" rel="icon" type="image/x-icon">'
+        self.assertEqual(scrape.find_favicon(document), "https://s1.example.com/f.ico")
+
+    def test_accepts_the_shortcut_spelling(self):
+        document = '<link rel="SHORTCUT ICON" href="https://s1.example.com/f.ico">'
+        self.assertEqual(scrape.find_favicon(document), "https://s1.example.com/f.ico")
+
+    def test_ignores_apple_touch_icon_which_is_a_different_image(self):
+        # Using it for a tab would render it downscaled and blurry.
+        document = (
+            '<link rel="apple-touch-icon" href="https://s1.example.com/big.png">'
+            '<link rel="icon" href="https://s1.example.com/f.ico">'
+        )
+        self.assertEqual(scrape.find_favicon(document), "https://s1.example.com/f.ico")
+
+    def test_an_apple_touch_icon_alone_is_not_mistaken_for_the_favicon(self):
+        document = '<link rel="apple-touch-icon" href="https://s1.example.com/big.png">'
+        self.assertEqual(scrape.find_favicon(document), "")
+        self.assertEqual(scrape.parse_metadata(document).favicon, "")
+
+    def test_no_link_means_no_favicon(self):
+        self.assertEqual(scrape.find_favicon("<html><head></head></html>"), "")
+        self.assertEqual(
+            scrape.parse_metadata("<html><head></head></html>").favicon, ""
+        )
+
+    def test_the_shipped_page_fixture_declares_one(self):
+        # INDEX_HTML carries a protocol-relative <link rel=icon>, so the whole
+        # discover() path is exercised against it rather than only in isolation.
+        self.assertEqual(
+            scrape.parse_metadata(INDEX_HTML).favicon,
+            "https://s1.biligames.com/fe-static/game/gw/images/common/favicon.ico",
+        )
+
+    def test_the_ico_is_not_confused_with_the_webpack_asset_named_icon(self):
+        # The bundles contain img/icon.<hash>.png, which is the app icon. If that
+        # ever leaked in here the tab would show a downscaled app icon.
+        bundle = 't.p+"img/icon.e419ff81.png"'
+        self.assertEqual(scrape.find_favicon(bundle), "")
 
 
 if __name__ == "__main__":

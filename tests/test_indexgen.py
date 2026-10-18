@@ -206,6 +206,58 @@ class IndexV1Tests(_ConfigFixture):
         self.assertIn("Unofficial", document["repo"]["description"])
 
 
+class FaviconAssetTests(_ConfigFixture):
+    """The favicon is written to the output root, and is not in the index.
+
+    It is not an F-Droid concept at all - nothing in the schema names it. It
+    exists because the landing page links it, so it must be published and must
+    not leak into the index as though it were an app image.
+    """
+
+    def test_it_is_written_to_the_output_root(self):
+        root = tempfile.mkdtemp(prefix="bdon-fdroid-favicon-")
+        self.addCleanup(shutil.rmtree, root, True)
+        assets = indexgen.Assets(
+            favicon=indexgen.Asset("favicon.ico", data=b"\x00\x00\x01\x00ico")
+        )
+        assets.write_all(root)
+        with open(os.path.join(root, "favicon.ico"), "rb") as handle:
+            self.assertEqual(handle.read(4), b"\x00\x00\x01\x00")
+
+    def test_no_favicon_is_not_an_error(self):
+        root = tempfile.mkdtemp(prefix="bdon-fdroid-favicon-")
+        self.addCleanup(shutil.rmtree, root, True)
+        indexgen.Assets().write_all(root)
+        self.assertFalse(os.path.exists(os.path.join(root, "favicon.ico")))
+
+    def test_write_repository_publishes_it_too(self):
+        # write_repository has its own asset loop, separate from write_all, and
+        # the favicon was missing from it: every test that called write_all
+        # directly passed while the real build published nothing. This goes
+        # through the function the CLI actually calls.
+        root = tempfile.mkdtemp(prefix="bdon-fdroid-favicon-")
+        self.addCleanup(shutil.rmtree, root, True)
+        assets = indexgen.Assets(
+            favicon=indexgen.Asset("favicon.ico", data=b"\x00\x00\x01\x00ico")
+        )
+        summary = indexgen.write_repository(root, self.config, [_release()], assets)
+        self.assertTrue(os.path.exists(os.path.join(root, "favicon.ico")))
+        self.assertIn("favicon.ico", summary["assets"])
+
+    def test_it_never_appears_in_the_index(self):
+        assets = indexgen.Assets(
+            favicon=indexgen.Asset("favicon.ico", data=b"ico"),
+        )
+        releases = [_release()]
+        for document in (
+            indexgen.build_index_v2(self.config, releases, assets),
+            indexgen.build_index_v1(self.config, releases, assets),
+        ):
+            serialised = json.dumps(document)
+            self.assertNotIn("favicon", serialised)
+
+
+
 class EntryTests(unittest.TestCase):
     def test_entry_names_the_index_and_its_hash(self):
         index_bytes = b'{"repo":{}}'
