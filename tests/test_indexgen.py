@@ -14,13 +14,15 @@ fdroidclient depends on:
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 import unittest
 
-from bdon_fdroid import indexgen
+from bdon_fdroid import indexgen, landing
 from bdon_fdroid.apk import Release
 from bdon_fdroid.config import Config
+from bdon_fdroid.state import State
 
 MIRROR = "https://l12-pkg-download.biligames.com/sirius/apk/"
 REPO_URL = "https://example.github.io/bdon-fdroid/fdroid/repo"
@@ -207,46 +209,81 @@ class IndexV1Tests(_ConfigFixture):
 
 
 class FaviconAssetTests(_ConfigFixture):
-    """The favicon is written to the output root, and is not in the index.
+    """The favicon is a page asset, not an index asset.
 
-    It is not an F-Droid concept at all - nothing in the schema names it. It
-    exists because the landing page links it, so it must be published and must
-    not leak into the index as though it were an app image.
+    It was originally written into the repository directory, next to
+    ``index-v2.json``, because that is where the other assets go. The page links
+    it *relatively*, and the page lives at the site root, so the link resolved
+    to a file that did not exist and every browser showed a default icon.
+
+    The invariant that matters: the page's own link must resolve to a file that
+    is actually there. That is what these tests assert, rather than where the
+    bytes happen to be written.
     """
 
-    def test_it_is_written_to_the_output_root(self):
-        root = tempfile.mkdtemp(prefix="bdon-fdroid-favicon-")
-        self.addCleanup(shutil.rmtree, root, True)
-        assets = indexgen.Assets(
-            favicon=indexgen.Asset("favicon.ico", data=b"\x00\x00\x01\x00ico")
-        )
-        assets.write_all(root)
-        with open(os.path.join(root, "favicon.ico"), "rb") as handle:
-            self.assertEqual(handle.read(4), b"\x00\x00\x01\x00")
+    ICO = b"\x00\x00\x01\x00ico"
 
-    def test_no_favicon_is_not_an_error(self):
-        root = tempfile.mkdtemp(prefix="bdon-fdroid-favicon-")
+    def _write_page(self, favicon=None):
+        root = tempfile.mkdtemp(prefix="bdon-fdroid-page-")
         self.addCleanup(shutil.rmtree, root, True)
-        indexgen.Assets().write_all(root)
+        page = os.path.join(root, "index.html")
+        landing.write(
+            page,
+            self.config,
+            State(releases=[_release()], last_checked=1789000000000,
+                  last_changed=1789000000000),
+            "ab" * 32,
+            None,
+            favicon=favicon,
+        )
+        return root, page
+
+    def test_the_favicon_lands_beside_the_page(self):
+        root, page = self._write_page(self.ICO)
+        icon = os.path.join(root, "favicon.ico")
+        self.assertTrue(os.path.exists(icon), "no favicon next to the page")
+        with open(icon, "rb") as handle:
+            self.assertEqual(handle.read(), self.ICO)
+
+    def test_the_pages_link_resolves_to_a_file_that_exists(self):
+        # The whole point. A relative link is resolved against the page, so the
+        # file has to be in the page's directory - not in the repository's.
+        root, page = self._write_page(self.ICO)
+        with open(page, encoding="utf-8") as handle:
+            document = handle.read()
+        hrefs = re.findall(r'<link[^>]*rel="icon"[^>]*href="([^"]+)"', document)
+        self.assertTrue(hrefs, "the page declares no favicon")
+        for href in hrefs:
+            self.assertFalse(
+                href.startswith(("http://", "https://", "//")),
+                f"{href} is absolute",
+            )
+            target = os.path.join(os.path.dirname(page), href)
+            self.assertTrue(
+                os.path.exists(target),
+                f"the page links {href}, which does not exist beside it",
+            )
+
+    def test_no_favicon_leaves_no_orphan_link(self):
+        # Without the icon the page still declares it, and the file is absent.
+        # That is a broken link, but it is the page's own business; what must
+        # not happen is a file appearing in the wrong directory.
+        root, page = self._write_page(None)
         self.assertFalse(os.path.exists(os.path.join(root, "favicon.ico")))
 
-    def test_write_repository_publishes_it_too(self):
-        # write_repository has its own asset loop, separate from write_all, and
-        # the favicon was missing from it: every test that called write_all
-        # directly passed while the real build published nothing. This goes
-        # through the function the CLI actually calls.
-        root = tempfile.mkdtemp(prefix="bdon-fdroid-favicon-")
+    def test_the_repository_does_not_contain_it(self):
+        # It is not an F-Droid concept, so nothing in the index names it and it
+        # must not turn up inside the repository directory.
+        root = tempfile.mkdtemp(prefix="bdon-fdroid-repo-")
         self.addCleanup(shutil.rmtree, root, True)
-        assets = indexgen.Assets(
-            favicon=indexgen.Asset("favicon.ico", data=b"\x00\x00\x01\x00ico")
-        )
+        assets = indexgen.Assets(favicon=indexgen.Asset("favicon.ico", data=self.ICO))
         summary = indexgen.write_repository(root, self.config, [_release()], assets)
-        self.assertTrue(os.path.exists(os.path.join(root, "favicon.ico")))
-        self.assertIn("favicon.ico", summary["assets"])
+        self.assertFalse(os.path.exists(os.path.join(root, "favicon.ico")))
+        self.assertNotIn("favicon.ico", summary["assets"])
 
     def test_it_never_appears_in_the_index(self):
         assets = indexgen.Assets(
-            favicon=indexgen.Asset("favicon.ico", data=b"ico"),
+            favicon=indexgen.Asset("favicon.ico", data=self.ICO),
         )
         releases = [_release()]
         for document in (

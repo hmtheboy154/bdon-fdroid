@@ -339,9 +339,22 @@ def write(
     state: State,
     fingerprint: str | None = None,
     site: SiteMetadata | None = None,
+    favicon: bytes | None = None,
 ) -> str:
+    """Write the page, and its favicon beside it.
+
+    The icon is written by whoever writes the page, because the page links it
+    *relatively*: it has to end up in the same directory as the HTML, and the
+    two cannot be separated without breaking the link. Writing it from the
+    repository builder instead put it inside the repository directory, where
+    nothing could reach it.
+    """
     document = render(config, state, fingerprint, site)
-    os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    os.makedirs(directory, exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(document)
+    if favicon:
+        with open(os.path.join(directory, "favicon.ico"), "wb") as handle:
+            handle.write(favicon)
     return document

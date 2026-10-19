@@ -170,5 +170,47 @@ class ScreenshotTests(unittest.TestCase):
             self.assertIn(Config().package_name, name)
 
 
+class PublishedLayoutTests(unittest.TestCase):
+    """The favicon has to be beside the page, and the page's link has to work.
+
+    This is the check that was missing when the favicon was written into the
+    repository directory: every unit test passed, and the published site still
+    showed a default icon, because the page's relative link pointed at a file
+    that was not there.
+    """
+
+    def test_the_built_page_links_an_icon_that_exists_beside_it(self):
+        import os
+        import re
+        import shutil
+        import tempfile
+
+        from bdon_fdroid import landing
+        from bdon_fdroid.state import State
+
+        root = tempfile.mkdtemp(prefix="bdon-fdroid-layout-")
+        self.addCleanup(shutil.rmtree, root, True)
+        page = os.path.join(root, "index.html")
+        landing.write(
+            page,
+            _config(),
+            State(releases=[], last_checked=0, last_changed=0),
+            None,
+            None,
+            favicon=b"\x00\x00\x01\x00ico",
+        )
+        self.assertTrue(os.path.exists(os.path.join(root, "favicon.ico")))
+
+        with open(page, encoding="utf-8") as handle:
+            document = handle.read()
+        hrefs = re.findall(r'<link[^>]*rel="icon"[^>]*href="([^"]+)"', document)
+        self.assertTrue(hrefs, "the page declares no favicon")
+        for href in hrefs:
+            self.assertTrue(
+                os.path.exists(os.path.join(root, href)),
+                f"the page links {href}, which is not beside it",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -357,7 +357,14 @@ def cmd_build(args) -> int:
         summary["signerFingerprint"] = fingerprint
 
     write_landing(
-        os.path.join(deploy, "index.html"), config, state, fingerprint, site
+        os.path.join(deploy, "index.html"),
+        config,
+        state,
+        fingerprint,
+        site,
+        # The page links its favicon relatively, so the file has to sit beside
+        # the page. The page writer puts it there.
+        favicon=assets.favicon.data if assets.favicon else None,
     )
     # GitHub Pages would otherwise run Jekyll, which drops files it dislikes.
     with open(os.path.join(deploy, ".nojekyll"), "w", encoding="utf-8") as handle:

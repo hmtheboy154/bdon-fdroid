@@ -25,7 +25,7 @@ python3 -m bdon_fdroid build      # fetch if new, then write + sign ./deploy
 python3 -m bdon_fdroid serve      # serve the output like a client would
 python3 -m bdon_fdroid verify --repo-url <url> --fingerprint <hex>
 
-python3 -m unittest discover -s tests        # 269 tests, stdlib only
+python3 -m unittest discover -s tests        # 271 tests, stdlib only
 (cd worker && node --test)                   # 18 tests
 ```
 
@@ -274,6 +274,15 @@ Related shape difference, if you are writing assertions: v2 **localises**
   and `sizes="any"` would claim it scales, which a raster cannot. Hot-linking
   the publisher's CDN instead would make our page depend on their availability
   to render, so do not.
+- **The favicon lives in the site root, not in the repository.** The page is
+  `deploy/index.html` and links `favicon.ico` relatively, so the file has to be
+  in `deploy/`, beside it. The repository is `deploy/fdroid/repo/`, and a file
+  there is invisible to the page. It was written there first, and every unit
+  test passed while the published site showed a default icon - the page's link
+  resolved to nothing. `landing.write` now writes the icon, because whoever
+  writes the page writes its icon and the two cannot be separated. The
+  invariant the tests assert is that the page's own link resolves to a file
+  that exists.
 - **Screenshots are pinned in `repo.json`** because the site's images are
   content-hashed; any URL pasted there must be updated by hand when the site is
   redesigned.
